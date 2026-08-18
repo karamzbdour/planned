@@ -62,13 +62,26 @@ export async function GET(req: Request) {
     if (l.status === "IN_PROGRESS") subjectMap[l.subject].inProgress++;
   }
 
-  // Progress table — for objectivesMet and totalMinutes per subject
-  const progressBySubject: Record<string, { objectivesMet: number; totalMinutes: number }> = {};
+  // Progress table — for objectivesMet, totalMinutes, masteryLevel per subject
+  const progressBySubject: Record<
+    string,
+    {
+      objectivesMet: number;
+      totalMinutes: number;
+      masteryLevel?: string;
+      isManualOverride?: boolean;
+    }
+  > = {};
   for (const p of progressRows) {
-    progressBySubject[p.subject] = { objectivesMet: p.objectivesMet, totalMinutes: p.totalMinutes };
+    progressBySubject[p.subject] = {
+      objectivesMet: p.objectivesMet,
+      totalMinutes: p.totalMinutes,
+      masteryLevel: p.masteryLevel,
+      isManualOverride: p.isManualOverride,
+    };
   }
 
-  // Ability level mapping
+  // Ability level mapping fallback
   const abilityMap: Record<string, string> = {
     Mathematics: child.numeracyLevel,
     Maths: child.numeracyLevel,
@@ -76,7 +89,12 @@ export async function GET(req: Request) {
     Literacy: child.literacyLevel,
   };
   function getAbility(subject: string) {
-    return abilityMap[subject] ?? safeChild.reasoningLevel;
+    return (
+      progressBySubject[subject]?.masteryLevel ||
+      abilityMap[subject] ||
+      safeChild.reasoningLevel ||
+      "DEVELOPING"
+    );
   }
 
   const subjects = Object.entries(subjectMap).map(([subject, counts]) => ({
@@ -87,6 +105,7 @@ export async function GET(req: Request) {
     objectivesMet: progressBySubject[subject]?.objectivesMet ?? 0,
     totalMinutes: progressBySubject[subject]?.totalMinutes ?? 0,
     abilityLevel: getAbility(subject),
+    isManualOverride: progressBySubject[subject]?.isManualOverride ?? false,
   }));
 
   const totalLessons = allLessons.length;

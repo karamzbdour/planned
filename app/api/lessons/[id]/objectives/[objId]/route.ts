@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { evaluateAndAdvanceMastery } from "@/lib/mastery";
 
 export async function PATCH(
   req: Request,
@@ -37,7 +38,9 @@ export async function PATCH(
     },
   });
 
-  // Update Progress.objectivesMet
+  let mastery = undefined;
+
+  // Update Progress.objectivesMet & evaluate mastery
   if (completed !== wasCompleted) {
     const delta = completed ? 1 : -1;
     await db.progress.upsert({
@@ -58,7 +61,12 @@ export async function PATCH(
         topicsTotal: 1,
       },
     });
+
+    mastery = await evaluateAndAdvanceMastery(
+      objective.lesson.childId,
+      objective.lesson.subject
+    );
   }
 
-  return NextResponse.json({ objective: updated });
+  return NextResponse.json({ objective: updated, mastery });
 }

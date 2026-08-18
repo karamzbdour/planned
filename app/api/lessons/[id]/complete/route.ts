@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { checkAndAwardBadges } from "@/lib/bloom";
+import { evaluateAndAdvanceMastery } from "@/lib/mastery";
 
 export async function POST(
   _req: Request,
@@ -40,12 +41,10 @@ export async function POST(
     data: { bloomStars: { increment: 3 } },
   });
 
-  // Update subject progress
+  // Update subject progress & total minutes
   await db.progress.upsert({
     where: { childId_subject: { childId: lesson.childId, subject: lesson.subject } },
     update: {
-      topicsCompleted: { increment: 1 },
-      topicsTotal: { increment: 1 },
       totalMinutes: { increment: durationMins },
     },
     create: {
@@ -57,8 +56,16 @@ export async function POST(
     },
   });
 
+  // Evaluate dynamic mastery tier advancement
+  const mastery = await evaluateAndAdvanceMastery(lesson.childId, lesson.subject);
+
   // Check for newly unlocked badges
   const newBadges = await checkAndAwardBadges(lesson.childId);
 
-  return NextResponse.json({ lesson: updated, bloomStars: child.bloomStars, newBadges });
+  return NextResponse.json({
+    lesson: updated,
+    bloomStars: child.bloomStars,
+    newBadges,
+    mastery,
+  });
 }

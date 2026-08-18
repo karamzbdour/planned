@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { calculateMasteryLevel, MasteryTier } from "@/lib/mastery";
 
 export const dynamic = "force-dynamic";
 
@@ -56,12 +57,25 @@ export async function GET(
     }))
   );
 
-  const abilityLevel =
+  const fallbackAbilityLevel =
     subject === "Mathematics" || subject === "Maths"
       ? child.numeracyLevel
       : subject === "English" || subject === "Literacy"
       ? child.literacyLevel
       : child.reasoningLevel;
+
+  const currentMasteryLevel = (progressRow?.masteryLevel || fallbackAbilityLevel || "DEVELOPING") as MasteryTier;
+  const isManualOverride = progressRow?.isManualOverride ?? false;
+  const metObjectivesCount = allObjectives.filter((o) => o.completed).length;
+
+  const masteryCalculation = calculateMasteryLevel({
+    topicsCompleted: completed.length,
+    topicsTotal: lessons.length,
+    objectivesMet: metObjectivesCount,
+    totalObjectives: allObjectives.length,
+    currentLevel: currentMasteryLevel,
+    isManualOverride,
+  });
 
   return NextResponse.json({
     subject,
@@ -70,10 +84,13 @@ export async function GET(
       topicsCompleted: completed.length,
       topicsTotal: lessons.length,
       topicsInProgress: inProgress.length,
-      objectivesMet: progressRow?.objectivesMet ?? 0,
+      objectivesMet: metObjectivesCount,
       totalMinutes: progressRow?.totalMinutes ?? 0,
     },
-    abilityLevel,
+    abilityLevel: masteryCalculation.newLevel,
+    isManualOverride,
+    lastLevelUpAt: progressRow?.lastLevelUpAt?.toISOString() ?? null,
+    nextTierRequirements: masteryCalculation.nextTierRequirements,
     lessons: {
       completed: completed.map((l) => ({
         id: l.id,

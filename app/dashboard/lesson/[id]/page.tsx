@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams} from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -146,7 +146,6 @@ function Section({
 
 export default function LessonDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const lessonId = params.id;
 
   const [lesson, setLesson] = useState<LessonData | null>(null);
@@ -203,6 +202,11 @@ export default function LessonDetailPage() {
   const [statusLoading, setStatusLoading] = useState(false);
   const [showJournalPrompt, setShowJournalPrompt] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
+  const [masteryLevelUp, setMasteryLevelUp] = useState<{
+    subject: string;
+    previousLevel: string;
+    newLevel: string;
+  } | null>(null);
 
   useEffect(() => {
     if (lesson?.status !== "IN_PROGRESS" || !lesson.startedAt) return;
@@ -243,12 +247,20 @@ export default function LessonDetailPage() {
     try {
       const res = await fetch(`/api/lessons/${lesson.id}/complete`, { method: "POST" });
       if (res.ok) {
+        const data = await res.json();
         setLesson((prev) =>
           prev
             ? { ...prev, status: "COMPLETED", completedAt: new Date().toISOString() }
             : prev,
         );
         setShowJournalPrompt(true);
+        if (data.mastery?.levelUp) {
+          setMasteryLevelUp({
+            subject: lesson.subject,
+            previousLevel: data.mastery.previousLevel,
+            newLevel: data.mastery.newLevel,
+          });
+        }
       }
     } finally {
       setStatusLoading(false);
@@ -505,6 +517,36 @@ export default function LessonDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Mastery level up celebration banner */}
+      {masteryLevelUp && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-900">
+                Mastery Level Up in {masteryLevelUp.subject}!
+              </p>
+              <p className="text-[11px] text-emerald-700">
+                {child.name} advanced from {masteryLevelUp.previousLevel.toLowerCase()} to{" "}
+                <span className="font-semibold uppercase text-emerald-900">
+                  {masteryLevelUp.newLevel}
+                </span>
+                .
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setMasteryLevelUp(null)}
+            className="w-6 h-6 flex items-center justify-center text-emerald-500 hover:text-emerald-700"
+            aria-label="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Journal prompt — shown after marking complete */}
       {showJournalPrompt && (

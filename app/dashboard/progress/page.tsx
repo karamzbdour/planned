@@ -27,6 +27,7 @@ interface SubjectRow {
   objectivesMet: number;
   totalMinutes: number;
   abilityLevel: string;
+  isManualOverride?: boolean;
 }
 
 interface ActivityItem {
