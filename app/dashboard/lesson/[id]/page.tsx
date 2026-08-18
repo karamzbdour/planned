@@ -31,6 +31,10 @@ import { QuizSection } from "@/components/lesson/quiz-section";
 import { LessonChat } from "@/components/lesson/lesson-chat";
 import { StickyLessonHud } from "@/components/lesson/sticky-lesson-hud";
 import { IdleBanner } from "@/components/lesson/idle-banner";
+import {
+  LessonCompletionModal,
+  type CompletionFeedbackData,
+} from "@/components/lesson/lesson-completion-modal";
 import { useLessonTimer, formatLessonTime } from "@/hooks/use-lesson-timer";
 import { cn } from "@/lib/utils";
 import type { FullLessonContent, ActivityType } from "@/lib/lessonGenerator";
@@ -60,6 +64,7 @@ interface LessonData {
     age: number | null;
     yearGroup: string | null;
     learningStyle: string | null;
+    bloomStars?: number;
   };
 }
 
@@ -202,13 +207,10 @@ export default function LessonDetailPage() {
 
   // ── Start / Mark complete / timer ────────────────────────────────────────
   const [statusLoading, setStatusLoading] = useState(false);
+  const [completionFeedback, setCompletionFeedback] = useState<CompletionFeedbackData | null>(null);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showJournalPrompt, setShowJournalPrompt] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
-  const [masteryLevelUp, setMasteryLevelUp] = useState<{
-    subject: string;
-    previousLevel: string;
-    newLevel: string;
-  } | null>(null);
   const [showStickyHud, setShowStickyHud] = useState(false);
   const timerCardRef = useRef<HTMLDivElement>(null);
 
@@ -287,17 +289,18 @@ export default function LessonDetailPage() {
                 completedAt: new Date().toISOString(),
                 activeSeconds,
                 durationMins: data.lesson?.durationMins ?? Math.max(1, Math.round(activeSeconds / 60)),
+                child: prev.child
+                  ? {
+                      ...prev.child,
+                      bloomStars: data.bloom?.totalStars ?? data.bloomStars ?? prev.child.bloomStars,
+                    }
+                  : prev.child,
               }
             : prev,
         );
+        setCompletionFeedback(data);
+        setShowCompletionModal(true);
         setShowJournalPrompt(true);
-        if (data.mastery?.levelUp) {
-          setMasteryLevelUp({
-            subject: lesson.subject,
-            previousLevel: data.mastery.previousLevel,
-            newLevel: data.mastery.newLevel,
-          });
-        }
       }
     } finally {
       setStatusLoading(false);
@@ -616,49 +619,19 @@ export default function LessonDetailPage() {
         <IdleBanner onResume={dismissIdle} onDismiss={dismissIdle} />
       )}
 
-      {/* Mastery level up celebration banner */}
-      {masteryLevelUp && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 print:hidden animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-emerald-900">
-                Mastery Level Up in {masteryLevelUp.subject}!
-              </p>
-              <p className="text-[11px] text-emerald-700">
-                {child.name} advanced from {masteryLevelUp.previousLevel.toLowerCase()} to{" "}
-                <span className="font-semibold uppercase text-emerald-900">
-                  {masteryLevelUp.newLevel}
-                </span>
-                .
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setMasteryLevelUp(null)}
-            className="w-6 h-6 flex items-center justify-center text-emerald-500 hover:text-emerald-700"
-            aria-label="Dismiss"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
       {/* Journal prompt — shown after marking complete */}
       {showJournalPrompt && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 print:hidden">
+        <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 print:hidden animate-in fade-in duration-200">
           <div className="flex items-center gap-2 min-w-0">
             <BookOpen className="w-4 h-4 text-amber-600 shrink-0" />
-            <p className="text-sm text-amber-800 font-medium">
-              Add a note to {child.name}&apos;s journal?
+            <p className="text-xs text-amber-900 font-medium">
+              Add a reflection note to {child.name}&apos;s journal?
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setShowJournalModal(true)}
-              className="text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors"
+              className="text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
             >
               Add note
             </button>
@@ -940,6 +913,20 @@ export default function LessonDetailPage() {
         onResume={resume}
         onComplete={handleComplete}
         isVisible={showStickyHud}
+      />
+
+      {/* Celebratory Lesson Completion Modal */}
+      <LessonCompletionModal
+        isOpen={showCompletionModal}
+        childName={child.name}
+        lessonTitle={content.title ?? lesson.topic}
+        subject={lesson.subject}
+        feedback={completionFeedback}
+        onClose={() => setShowCompletionModal(false)}
+        onOpenJournal={() => {
+          setShowCompletionModal(false);
+          setShowJournalModal(true);
+        }}
       />
     </div>
   );

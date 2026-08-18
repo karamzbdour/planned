@@ -96,7 +96,7 @@ export const StickyLessonHud = memo(function StickyLessonHud({
         aria-label={isPausedOrIdle ? "Resume lesson timer" : "Pause lesson timer"}
       >
         {isPausedOrIdle ? (
-          <Play className="w-3 h-3 fill-current ml-0.5" />
+          <Play className="w-3 h-3 fill-current translate-x-[0.5px]" />
         ) : (
           <Pause className="w-3 h-3 fill-current" />
         )}

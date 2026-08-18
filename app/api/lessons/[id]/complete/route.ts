@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { checkAndAwardBadges } from "@/lib/bloom";
+import {
+  checkAndAwardBadges,
+  getLevel,
+  getNextLevel,
+  BADGE_DEFS,
+} from "@/lib/bloom";
 import { evaluateAndAdvanceMastery } from "@/lib/mastery";
 
 export async function POST(
@@ -16,7 +21,7 @@ export async function POST(
 
   const lesson = await db.lesson.findFirst({
     where: { id: params.id, child: { userId: session.user.id } },
-    include: { objectives: true },
+    include: { objectives: true, child: true },
   });
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
@@ -51,9 +56,10 @@ export async function POST(
   });
 
   // Award 3 bloom stars for completing a lesson
+  const starsGained = 3;
   const child = await db.child.update({
     where: { id: lesson.childId },
-    data: { bloomStars: { increment: 3 } },
+    data: { bloomStars: { increment: starsGained } },
   });
 
   // Update subject progress & total minutes
@@ -75,12 +81,31 @@ export async function POST(
   const mastery = await evaluateAndAdvanceMastery(lesson.childId, lesson.subject);
 
   // Check for newly unlocked badges
-  const newBadges = await checkAndAwardBadges(lesson.childId);
+  const newBadgeTypes = await checkAndAwardBadges(lesson.childId);
+  const newBadges = BADGE_DEFS.filter((b) => newBadgeTypes.includes(b.type));
+
+  const currentBloomLevel = getLevel(child.bloomStars);
+  const nextBloomLevel = getNextLevel(child.bloomStars);
+  const starsToNextBloomLevel = nextBloomLevel
+    ? Math.max(nextBloomLevel.minStars - child.bloomStars, 0)
+    : 0;
 
   return NextResponse.json({
     lesson: updated,
     bloomStars: child.bloomStars,
+    starsGained,
+    bloom: {
+      starsGained,
+      totalStars: child.bloomStars,
+      currentLevel: currentBloomLevel,
+      nextLevel: nextBloomLevel,
+      starsToNextLevel: starsToNextBloomLevel,
+    },
     newBadges,
-    mastery,
+    newBadgeTypes,
+    mastery: {
+      ...mastery,
+      subject: lesson.subject,
+    },
   });
 }

@@ -74,18 +74,22 @@ export interface MasteryInput {
   defaultBaseline?: MasteryTier;
 }
 
+export interface NextTierRequirements {
+  nextTier: MasteryTier;
+  nextTierLabel: string;
+  targetRatio: number;
+  targetTopics: number;
+  neededObjectives: number;
+  neededTopics: number;
+  progressPercent: number;
+}
+
 export interface MasteryResult {
   newLevel: MasteryTier;
   levelChanged: boolean;
   levelUp: boolean;
   ratio: number;
-  nextTierRequirements?: {
-    nextTier: MasteryTier;
-    targetRatio: number;
-    targetTopics: number;
-    neededObjectives: number;
-    neededTopics: number;
-  };
+  nextTierRequirements?: NextTierRequirements | null;
 }
 
 /**
@@ -109,6 +113,28 @@ export function calculateMasteryLevel(input: MasteryInput): MasteryResult {
 
   const ratio = totalObjectives > 0 ? objectivesMet / totalObjectives : 0;
 
+  function buildNextTierReqs(tier: MasteryTier): NextTierRequirements | null {
+    const nextTierName = MASTERY_TIER_CONFIG[tier].nextTier;
+    if (!nextTierName) return null;
+    const config = MASTERY_TIER_CONFIG[nextTierName];
+    const targetObjectives = Math.max(1, Math.ceil(Math.max(totalObjectives, 1) * config.minRatio));
+    const neededTopics = Math.max(config.minTopics - topicsCompleted, 0);
+    const neededObjectives = Math.max(targetObjectives - objectivesMet, 0);
+    const topicProg = config.minTopics > 0 ? Math.min(topicsCompleted / config.minTopics, 1) : 1;
+    const objProg = targetObjectives > 0 ? Math.min(objectivesMet / targetObjectives, 1) : 1;
+    const progressPercent = Math.min(100, Math.max(0, Math.round(((topicProg + objProg) / 2) * 100)));
+
+    return {
+      nextTier: nextTierName,
+      nextTierLabel: config.label,
+      targetRatio: config.minRatio,
+      targetTopics: config.minTopics,
+      neededObjectives,
+      neededTopics,
+      progressPercent,
+    };
+  }
+
   // If manual override is enabled by the parent, preserve chosen level
   if (isManualOverride) {
     return {
@@ -116,6 +142,7 @@ export function calculateMasteryLevel(input: MasteryInput): MasteryResult {
       levelChanged: false,
       levelUp: false,
       ratio,
+      nextTierRequirements: buildNextTierReqs(validCurrentLevel),
     };
   }
 
@@ -132,6 +159,7 @@ export function calculateMasteryLevel(input: MasteryInput): MasteryResult {
       levelChanged: validCurrentLevel !== baseline,
       levelUp: false,
       ratio,
+      nextTierRequirements: buildNextTierReqs(baseline),
     };
   }
 
@@ -153,28 +181,12 @@ export function calculateMasteryLevel(input: MasteryInput): MasteryResult {
     levelChanged &&
     MASTERY_ORDER[calculatedLevel] > MASTERY_ORDER[validCurrentLevel];
 
-  // Calculate next tier requirements
-  const nextTierName = MASTERY_TIER_CONFIG[calculatedLevel].nextTier;
-  let nextTierRequirements: MasteryResult["nextTierRequirements"] = undefined;
-
-  if (nextTierName) {
-    const config = MASTERY_TIER_CONFIG[nextTierName];
-    const targetObjectives = Math.ceil(totalObjectives * config.minRatio);
-    nextTierRequirements = {
-      nextTier: nextTierName,
-      targetRatio: config.minRatio,
-      targetTopics: config.minTopics,
-      neededObjectives: Math.max(targetObjectives - objectivesMet, 0),
-      neededTopics: Math.max(config.minTopics - topicsCompleted, 0),
-    };
-  }
-
   return {
     newLevel: calculatedLevel,
     levelChanged,
     levelUp,
     ratio,
-    nextTierRequirements,
+    nextTierRequirements: buildNextTierReqs(calculatedLevel),
   };
 }
 
@@ -224,6 +236,19 @@ async function syncChildPillars(childId: string, subject: string, newLevel: Mast
   }
 }
 
+export interface EvaluatedMastery {
+  previousLevel: MasteryTier;
+  newLevel: MasteryTier;
+  levelChanged: boolean;
+  levelUp: boolean;
+  ratio: number;
+  topicsCompleted: number;
+  topicsTotal: number;
+  objectivesMet: number;
+  totalObjectives: number;
+  nextTierRequirements?: NextTierRequirements | null;
+}
+
 /**
  * Evaluates the mastery tier for a child in a subject, updates DB records, and returns event data.
  */
@@ -234,13 +259,7 @@ export async function evaluateAndAdvanceMastery(
     isManualOverride?: boolean;
     forceRecalculate?: boolean;
   }
-): Promise<{
-  previousLevel: MasteryTier;
-  newLevel: MasteryTier;
-  levelChanged: boolean;
-  levelUp: boolean;
-  ratio: number;
-}> {
+): Promise<EvaluatedMastery> {
   const [topicsCompleted, topicsTotal, objectivesMet, totalObjectives, existingProgress] =
     await Promise.all([
       db.lesson.count({
@@ -312,5 +331,10 @@ export async function evaluateAndAdvanceMastery(
     levelChanged: result.levelChanged,
     levelUp: result.levelUp,
     ratio: result.ratio,
+    topicsCompleted,
+    topicsTotal,
+    objectivesMet,
+    totalObjectives,
+    nextTierRequirements: result.nextTierRequirements ?? null,
   };
 }
