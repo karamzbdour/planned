@@ -46,7 +46,7 @@ function safeParseJson<T>(s: string, fallback: T): T {
 
 /**
  * Build the system prompt for the parent-facing chatbot. Gives the model the
- * curriculum / faith / children context once so the parent doesn't have to
+ * curriculum / faith / children context and optionally lesson context so the parent doesn't have to
  * re-explain it every message.
  */
 function systemPrompt(args: {

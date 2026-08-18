@@ -214,14 +214,18 @@ model JournalEntry {
 // ─── Progress ────────────────────────────────────────────────────────────────
 
 model Progress {
-  id              String   @id @default(cuid())
-  childId         String
-  subject         String
-  topicsCompleted Int      @default(0)
-  topicsTotal     Int      @default(0)
-  objectivesMet   Int      @default(0)
-  totalMinutes    Int      @default(0)
-  lastUpdated     DateTime @default(now()) @updatedAt
+  id               String    @id @default(cuid())
+  childId          String
+  subject          String
+  topicsCompleted  Int       @default(0)
+  topicsTotal      Int       @default(0)
+  objectivesMet    Int       @default(0)
+  totalMinutes     Int       @default(0)
+  // EMERGING | DEVELOPING | SECURE | EXCEEDING
+  masteryLevel     String    @default("DEVELOPING")
+  isManualOverride Boolean   @default(false)
+  lastLevelUpAt    DateTime?
+  lastUpdated      DateTime  @default(now()) @updatedAt
 
   child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
 

@@ -332,7 +332,7 @@ Rules:
 - Connect to ${child.name}'s interests (${interests}) where natural
 - Follow the CURRICULUM APPROACH section above — do not default to a BNC-style lesson if the curriculum is Montessori or Unschooling`;
 
-  // ── Call Claude ─────────────────────────────────────────────────────────
+  // ── Call AI Model ─────────────────────────────────────────────────────────
   let message;
   try {
     message = await ai.messages.create({
@@ -348,7 +348,7 @@ Rules:
   const text =
     message.content[0].type === "text" ? message.content[0].text : "";
 
-  // Strip any markdown code fences if Claude added them
+  // Strip any markdown code fences if the AI model added them
   const stripped = text
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
