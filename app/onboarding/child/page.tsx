@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   CalendarCheck,
@@ -23,6 +24,9 @@ interface ChildData {
 }
 
 const TOTAL_STEPS = 3;
+const STEP_LABELS = ["Name & age", "Interests", "Confirmation"];
+const STORAGE_KEY_CHILD_DATA = "planned:onboarding_child:data";
+const STORAGE_KEY_CHILD_STEP = "planned:onboarding_child:step";
 
 const INTERESTS = [
   { id: "drawing", label: "Drawing", emoji: "🎨" },
@@ -70,9 +74,17 @@ const LEARNING_STYLES = [
 
 function ProgressBar({ step }: { step: number }) {
   return (
-    <div className="flex items-center justify-center gap-2 mb-8">
+    <div
+      role="progressbar"
+      aria-label="Child onboarding progress"
+      aria-valuenow={step}
+      aria-valuemin={1}
+      aria-valuemax={TOTAL_STEPS}
+      aria-valuetext={`Step ${step} of ${TOTAL_STEPS}: ${STEP_LABELS[step - 1]}`}
+      className="flex items-center justify-center gap-2 mb-8"
+    >
       {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={i} className="flex items-center gap-2" aria-hidden="true">
           <div
             className={`transition-all duration-300 rounded-full flex items-center justify-center
               ${i + 1 < step
@@ -111,10 +123,73 @@ function ageToYearGroup(age: number): string {
   return map[age] ?? "Year 1";
 }
 
+// ─── Skeleton Loading ─────────────────────────────────────────────────────────
+
+function ChildOnboardingSkeleton() {
+  return (
+    <div className="flex flex-col items-center px-4 py-10 min-h-screen">
+      <div className="w-full max-w-lg">
+        {/* Header */}
+        <div className="flex flex-col items-center mb-2">
+          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4">
+            <CalendarCheck className="w-6 h-6 text-white" strokeWidth={1.75} />
+          </div>
+          <div className="h-3.5 w-28 bg-muted animate-pulse rounded-full mb-1" />
+          <div className="h-3 w-36 bg-muted/50 animate-pulse rounded-full mt-1" />
+        </div>
+
+        {/* Progress bar skeleton */}
+        <div className="flex items-center justify-center gap-2 mb-8">
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-muted/70 animate-pulse" />
+              {i < TOTAL_STEPS - 1 && (
+                <div className="h-0.5 w-8 rounded-full bg-muted/50 animate-pulse" />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Card Skeleton */}
+        <div className="bg-white rounded-3xl border border-border/50 shadow-sm overflow-hidden p-5 sm:p-8 space-y-6">
+          <div className="space-y-2">
+            <div className="h-7 w-3/5 bg-muted/80 animate-pulse rounded-xl" />
+            <div className="h-4 w-4/5 bg-muted/50 animate-pulse rounded-lg" />
+          </div>
+
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <div className="h-4 w-24 bg-muted/60 animate-pulse rounded" />
+              <div className="h-11 w-full bg-muted/20 border border-border/40 animate-pulse rounded-xl" />
+            </div>
+            <div className="space-y-1.5 pt-2">
+              <div className="h-4 w-16 bg-muted/60 animate-pulse rounded" />
+              <div className="h-14 w-full bg-muted/20 border border-border/40 animate-pulse rounded-xl" />
+            </div>
+          </div>
+
+          {/* Action button skeleton */}
+          <div className="pt-4 flex gap-3">
+            <div className="flex-1 h-12 bg-brand-green/20 animate-pulse rounded-xl" />
+          </div>
+        </div>
+
+        {/* Footer hint */}
+        <div className="h-3 w-20 bg-muted/40 animate-pulse rounded mx-auto mt-4" />
+      </div>
+    </div>
+  );
+}
+
 // ─── Child wizard ─────────────────────────────────────────────────────────────
 
-export default function OnboardingChildPage() {
-  const [step, setStep] = useState(1);
+function OnboardingChildContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const stepParam = searchParams.get("step");
+
+  const [step, setStep] = useState<number>(1);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -125,6 +200,80 @@ export default function OnboardingChildPage() {
     learningStyle: "",
   });
   const [paywallTier, setPaywallTier] = useState<"BASIC" | "PREMIUM" | null>(null);
+
+  // 1. Initial hydration from localStorage & searchParams
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem(STORAGE_KEY_CHILD_DATA);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed && typeof parsed === "object") {
+          setData((prev) => ({
+            ...prev,
+            ...parsed,
+          }));
+        }
+      }
+
+      if (stepParam) {
+        const parsedStep = parseInt(stepParam, 10);
+        if (!isNaN(parsedStep) && parsedStep >= 1 && parsedStep <= TOTAL_STEPS) {
+          setStep(parsedStep);
+        } else {
+          setStep(1);
+          router.replace(`/onboarding/child?step=1`, { scroll: false });
+        }
+      } else {
+        const savedStep = localStorage.getItem(STORAGE_KEY_CHILD_STEP);
+        const targetStep = savedStep ? parseInt(savedStep, 10) : 1;
+        const validStep = !isNaN(targetStep) && targetStep >= 1 && targetStep <= TOTAL_STEPS ? targetStep : 1;
+        setStep(validStep);
+        router.replace(`/onboarding/child?step=${validStep}`, { scroll: false });
+      }
+    } catch (e) {
+      console.error("Failed to restore child onboarding state:", e);
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  // 2. React to stepParam changes (browser back/forward navigation)
+  useEffect(() => {
+    if (stepParam) {
+      const parsed = parseInt(stepParam, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= TOTAL_STEPS) {
+        setStep(parsed);
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem(STORAGE_KEY_CHILD_STEP, String(parsed));
+          } catch (e) {}
+        }
+      }
+    }
+  }, [stepParam]);
+
+  // 3. Save data to localStorage whenever it changes
+  useEffect(() => {
+    if (!isHydrated) return;
+    try {
+      localStorage.setItem(STORAGE_KEY_CHILD_DATA, JSON.stringify(data));
+    } catch (e) {
+      console.error("Failed to save child onboarding data:", e);
+    }
+  }, [data, isHydrated]);
+
+  function goToStep(targetStep: number) {
+    const clamped = Math.max(1, Math.min(TOTAL_STEPS, targetStep));
+    setStep(clamped);
+    setError("");
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(STORAGE_KEY_CHILD_STEP, String(clamped));
+      } catch (e) {}
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    router.push(`/onboarding/child?step=${clamped}`, { scroll: false });
+  }
 
   function update(patch: Partial<ChildData>) {
     setData((prev) => ({ ...prev, ...patch }));
@@ -149,7 +298,7 @@ export default function OnboardingChildPage() {
       if (!data.learningStyle) { setError("Choose a learning style."); return; }
     }
     setError("");
-    setStep((s) => s + 1);
+    goToStep(step + 1);
   }
 
   async function handleSave() {
@@ -186,6 +335,14 @@ export default function OnboardingChildPage() {
       localStorage.setItem("planned:activeChildId", body.child.id);
     }
 
+    // Clear saved child onboarding draft
+    try {
+      localStorage.removeItem(STORAGE_KEY_CHILD_DATA);
+      localStorage.removeItem(STORAGE_KEY_CHILD_STEP);
+    } catch (e) {
+      console.error("Failed to clean up child onboarding draft:", e);
+    }
+
     // Use a full-page navigation rather than router.push() + refresh().
     // Next.js's client-side cache was occasionally serving the
     // pre-add layout (no new child in the sidebar dropdown) even after
@@ -194,19 +351,26 @@ export default function OnboardingChildPage() {
     window.location.assign("/dashboard");
   }
 
-  const stepLabels = ["Name & age", "Interests", "Confirmation"];
+  if (!isHydrated) {
+    return <ChildOnboardingSkeleton />;
+  }
 
   return (
     <div className="flex flex-col items-center px-4 py-10 min-h-screen">
+      {/* Screen reader live region for step navigation */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {`Step ${step} of ${TOTAL_STEPS}: ${STEP_LABELS[step - 1]}`}
+      </div>
+
       <div className="w-full max-w-lg">
 
         {/* Header */}
         <div className="flex flex-col items-center mb-2">
-          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4">
+          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4" aria-hidden="true">
             <CalendarCheck className="w-6 h-6 text-white" strokeWidth={1.75} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-widest text-brand-green mb-1">
-            {stepLabels[step - 1]}
+            {STEP_LABELS[step - 1]}
           </p>
           <p className="text-sm text-muted-foreground">Your child&apos;s profile</p>
         </div>
@@ -219,7 +383,7 @@ export default function OnboardingChildPage() {
           {step === 1 && (
             <div className="p-5 sm:p-8 space-y-6">
               <div>
-                <h2 className="font-display text-2xl font-bold text-brand-green-deep">
+                <h2 id="child-basics-heading" className="font-display text-2xl font-bold text-brand-green-deep">
                   Tell us about your child
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -228,16 +392,17 @@ export default function OnboardingChildPage() {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
                   {error}
                 </div>
               )}
 
               <div>
-                <label className="text-sm font-medium text-brand-green-deep block mb-1.5">
+                <label htmlFor="child-onboarding-name" className="text-sm font-medium text-brand-green-deep block mb-1.5">
                   Child&apos;s name
                 </label>
                 <input
+                  id="child-onboarding-name"
                   type="text"
                   value={data.name}
                   onChange={(e) => update({ name: e.target.value })}
@@ -247,20 +412,22 @@ export default function OnboardingChildPage() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-brand-green-deep block mb-3">
+                <span id="child-age-heading" className="text-sm font-medium text-brand-green-deep block mb-3">
                   Age
-                </label>
+                </span>
                 <div className="flex items-center gap-4">
                   <button
                     type="button"
+                    aria-label="Decrease child's age"
                     onClick={() => update({ age: Math.max(4, data.age - 1) })}
-                    className="w-11 h-11 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-brand-green hover:text-brand-green transition-colors"
+                    disabled={data.age <= 4}
+                    className="w-11 h-11 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-brand-green hover:text-brand-green transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green disabled:opacity-40"
                   >
-                    <Minus className="w-4 h-4" />
+                    <Minus aria-hidden="true" className="w-4 h-4" />
                   </button>
 
                   <div className="flex-1 text-center">
-                    <p className="font-display text-4xl font-bold text-brand-green-deep">
+                    <p aria-live="polite" aria-atomic="true" className="font-display text-4xl font-bold text-brand-green-deep">
                       {data.age}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -270,27 +437,31 @@ export default function OnboardingChildPage() {
 
                   <button
                     type="button"
+                    aria-label="Increase child's age"
                     onClick={() => update({ age: Math.min(11, data.age + 1) })}
-                    className="w-11 h-11 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-brand-green hover:text-brand-green transition-colors"
+                    disabled={data.age >= 11}
+                    className="w-11 h-11 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-brand-green hover:text-brand-green transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green disabled:opacity-40"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus aria-hidden="true" className="w-4 h-4" />
                   </button>
                 </div>
 
                 {/* Age track */}
-                <div className="flex justify-between mt-4 gap-1">
+                <div role="group" aria-label="Quick age select" className="flex justify-between mt-4 gap-1">
                   {Array.from({ length: 8 }, (_, i) => i + 4).map((a) => (
                     <button
                       key={a}
                       type="button"
+                      aria-label={`Set age to ${a} (${ageToYearGroup(a)})`}
+                      aria-pressed={a === data.age}
                       onClick={() => update({ age: a })}
-                      className={`flex-1 h-1.5 rounded-full transition-colors ${
+                      className={`flex-1 h-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green ${
                         a === data.age ? "bg-brand-green" : "bg-muted"
                       }`}
                     />
                   ))}
                 </div>
-                <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+                <div className="flex justify-between mt-1 text-xs text-muted-foreground" aria-hidden="true">
                   <span>4</span>
                   <span>11</span>
                 </div>
@@ -302,7 +473,7 @@ export default function OnboardingChildPage() {
           {step === 2 && (
             <div className="p-5 sm:p-8 space-y-6">
               <div>
-                <h2 className="font-display text-2xl font-bold text-brand-green-deep">
+                <h2 id="child-interests-heading" className="font-display text-2xl font-bold text-brand-green-deep">
                   What does {data.name || "your child"} love?
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -311,31 +482,32 @@ export default function OnboardingChildPage() {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
                   {error}
                 </div>
               )}
 
               {/* Interests */}
               <div>
-                <p className="text-sm font-medium text-brand-green-deep mb-3">
+                <span id="interests-group-label" className="text-sm font-medium text-brand-green-deep mb-3 block">
                   Interests <span className="text-muted-foreground font-normal">(choose any)</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
+                </span>
+                <div role="group" aria-labelledby="interests-group-label" className="flex flex-wrap gap-2">
                   {INTERESTS.map(({ id, label, emoji }) => {
                     const selected = data.interests.includes(id);
                     return (
                       <button
                         key={id}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() => toggleInterest(id)}
-                        className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border-2 text-sm font-medium transition-all
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border-2 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2
                           ${selected
                             ? "border-brand-green bg-brand-mint text-brand-green-deep"
                             : "border-border/60 bg-white text-muted-foreground hover:border-brand-green/40"
                           }`}
                       >
-                        <span>{emoji}</span>
+                        <span aria-hidden="true">{emoji}</span>
                         {label}
                       </button>
                     );
@@ -345,24 +517,26 @@ export default function OnboardingChildPage() {
 
               {/* Learning style */}
               <div>
-                <p className="text-sm font-medium text-brand-green-deep mb-3">
+                <span id="learning-style-label" className="text-sm font-medium text-brand-green-deep mb-3 block">
                   Learning style <span className="text-muted-foreground font-normal">(pick one)</span>
-                </p>
-                <div className="grid grid-cols-2 gap-2">
+                </span>
+                <div role="radiogroup" aria-labelledby="learning-style-label" className="grid grid-cols-2 gap-2">
                   {LEARNING_STYLES.map(({ id, label, description, emoji }) => {
                     const selected = data.learningStyle === id;
                     return (
                       <button
                         key={id}
                         type="button"
+                        role="radio"
+                        aria-checked={selected}
                         onClick={() => update({ learningStyle: id })}
-                        className={`p-4 rounded-2xl border-2 text-left transition-all
+                        className={`p-4 rounded-2xl border-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2
                           ${selected
                             ? "border-brand-green bg-brand-mint"
                             : "border-border/60 bg-white hover:border-brand-green/40 hover:bg-brand-mint/30"
                           }`}
                       >
-                        <span className="text-2xl block mb-2">{emoji}</span>
+                        <span aria-hidden="true" className="text-2xl block mb-2">{emoji}</span>
                         <p className={`text-sm font-semibold ${selected ? "text-brand-green-deep" : "text-foreground"}`}>
                           {label}
                         </p>
@@ -390,7 +564,7 @@ export default function OnboardingChildPage() {
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                <div role="alert" aria-live="assertive" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
                   {error}
                 </div>
               )}
@@ -399,7 +573,7 @@ export default function OnboardingChildPage() {
               <div className="planned-gradient-soft rounded-2xl p-6 space-y-4">
                 {/* Avatar + name */}
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white/80 flex items-center justify-center shadow-sm">
+                  <div className="w-16 h-16 rounded-2xl bg-white/80 flex items-center justify-center shadow-sm" aria-hidden="true">
                     <span className="text-3xl">
                       {data.interests[0]
                         ? INTERESTS.find((i) => i.id === data.interests[0])?.emoji ?? "⭐"
@@ -414,7 +588,7 @@ export default function OnboardingChildPage() {
                       Age {data.age} · {ageToYearGroup(data.age)}
                     </p>
                     {/* Bloom stars */}
-                    <div className="flex gap-0.5 mt-1">
+                    <div className="flex gap-0.5 mt-1" aria-hidden="true">
                       {Array.from({ length: 3 }).map((_, i) => (
                         <Star key={i} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                       ))}
@@ -448,7 +622,7 @@ export default function OnboardingChildPage() {
                 {/* Bloom intro */}
                 <div className="bg-white/60 rounded-xl p-4">
                   <p className="text-xs font-semibold text-brand-green-deep uppercase tracking-wide mb-1">
-                    🌸 Bloom rewards
+                    <span aria-hidden="true">🌸 </span>Bloom rewards
                   </p>
                   <p className="text-sm text-brand-green-deep/80">
                     {data.name} will earn Bloom stars for every completed lesson. They can trade them in for rewards you set.
@@ -463,11 +637,11 @@ export default function OnboardingChildPage() {
             {step > 1 && (
               <button
                 type="button"
-                onClick={() => setStep((s) => s - 1)}
+                onClick={() => goToStep(step - 1)}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-4 h-12 rounded-xl border border-input text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                className="flex items-center gap-1.5 px-4 h-12 rounded-xl border border-input text-sm font-medium text-muted-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft aria-hidden="true" className="w-4 h-4" />
                 Back
               </button>
             )}
@@ -476,16 +650,16 @@ export default function OnboardingChildPage() {
               <button
                 type="button"
                 onClick={handleNext}
-                className="flex-1 h-12 bg-brand-green hover:bg-brand-green-deep text-white font-semibold rounded-xl transition-colors"
+                className="flex-1 h-12 bg-brand-green hover:bg-brand-green-deep text-white font-semibold rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
               >
                 Continue
               </button>
             ) : paywallTier ? (
               <Link
                 href="/pricing"
-                className="flex-1 h-12 bg-brand-green hover:bg-brand-green-deep text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                className="flex-1 h-12 bg-brand-green hover:bg-brand-green-deep text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
               >
-                <Zap className="w-4 h-4" />
+                <Zap aria-hidden="true" className="w-4 h-4" />
                 Upgrade to {paywallTier === "BASIC" ? "Basic" : "Premium"}
               </Link>
             ) : (
@@ -493,9 +667,9 @@ export default function OnboardingChildPage() {
                 type="button"
                 onClick={handleSave}
                 disabled={loading}
-                className="flex-1 h-12 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                className="flex-1 h-12 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green focus-visible:ring-offset-2"
               >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading && <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />}
                 Start planning with {data.name}
               </button>
             )}
@@ -507,5 +681,13 @@ export default function OnboardingChildPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingChildPage() {
+  return (
+    <Suspense fallback={<ChildOnboardingSkeleton />}>
+      <OnboardingChildContent />
+    </Suspense>
   );
 }
