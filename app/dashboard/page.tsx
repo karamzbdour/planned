@@ -7,6 +7,7 @@ import { LessonListSkeleton } from "@/components/dashboard/lesson-card-skeleton"
 import { BloomBar } from "@/components/dashboard/bloom-bar";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { GenerateLessons } from "@/components/dashboard/generate-lessons";
+import { ActiveLessonBanner } from "@/components/dashboard/active-lesson-banner";
 import { BookOpen, Loader2, Plus, CalendarDays, AlertTriangle, Clock, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -20,9 +21,28 @@ interface MissedLesson {
   topic: string;
   dayDate: string;
   status: string;
+  durationMins?: number;
+  activeSeconds?: number;
+  isPaused?: boolean;
   objectivesDone: number;
   objectivesTotal: number;
   parsedContent: { title?: string; description?: string };
+}
+
+interface DashboardLesson {
+  id: string;
+  subject: string;
+  topic: string;
+  status: string;
+  durationMins: number;
+  activeSeconds?: number;
+  isPaused?: boolean;
+  startedAt: string | null;
+  completedAt: string | null;
+  dayDate: string;
+  objectivesDone?: number;
+  objectivesTotal?: number;
+  parsedContent: { title?: string; description?: string; objectives?: string[] };
 }
 
 interface DashboardData {
@@ -41,17 +61,8 @@ interface DashboardData {
   } | null;
   range: DashboardRange;
   rangeLabel: string;
-  todaysLessons: {
-    id: string;
-    subject: string;
-    topic: string;
-    status: string;
-    durationMins: number;
-    startedAt: string | null;
-    completedAt: string | null;
-    dayDate: string;
-    parsedContent: { title?: string; description?: string; objectives?: string[] };
-  }[];
+  todaysLessons: DashboardLesson[];
+  activeLesson: DashboardLesson | null;
   missedLessons: MissedLesson[];
   stats: {
     lessonsDoneToday: number;
@@ -354,6 +365,11 @@ export default function DashboardPage() {
         curriculumPercent={data.stats.curriculumPercent}
         bloomStars={data.stats.bloomStars}
       />
+
+      {/* Active in-progress lesson banner */}
+      {data.activeLesson && (
+        <ActiveLessonBanner lesson={data.activeLesson} />
+      )}
 
       {/* Lessons in the selected range. Week-level ranges (this-week,
           last-week) are broken into per-day groups; single-day ranges

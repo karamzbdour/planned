@@ -22,16 +22,31 @@ export async function POST(
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
+  const body = await _req.json().catch(() => ({}));
+
   const now = new Date();
-  const startedAt = lesson.startedAt ?? now;
-  const durationMins = Math.round((now.getTime() - startedAt.getTime()) / 60000);
+  let finalActiveSeconds = 0;
+
+  if (typeof body.activeSeconds === "number" && !isNaN(body.activeSeconds) && body.activeSeconds >= 0) {
+    finalActiveSeconds = Math.floor(body.activeSeconds);
+  } else if (lesson.activeSeconds > 0) {
+    finalActiveSeconds = lesson.activeSeconds;
+  } else if (lesson.startedAt) {
+    // Fallback: elapsed wall clock minutes, capped at 120 minutes to prevent runaway idle time
+    const wallClockSecs = Math.max(0, Math.floor((now.getTime() - lesson.startedAt.getTime()) / 1000));
+    finalActiveSeconds = Math.min(wallClockSecs, 120 * 60);
+  }
+
+  const durationMins = Math.max(1, Math.round(finalActiveSeconds / 60));
 
   const updated = await db.lesson.update({
     where: { id: params.id },
     data: {
       status: "COMPLETED",
       completedAt: now,
-      durationMins: Math.max(durationMins, 1),
+      durationMins,
+      activeSeconds: finalActiveSeconds,
+      isPaused: false,
     },
   });
 

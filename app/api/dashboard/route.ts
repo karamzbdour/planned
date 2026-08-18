@@ -116,13 +116,14 @@ export async function GET(req: Request) {
   const missedFrom = new Date(now);
   missedFrom.setDate(missedFrom.getDate() - 14);
 
-  const [rangeLessons, totalLessons, completedLessons, nextReward, missedLessons] =
+  const [rangeLessons, totalLessons, completedLessons, nextReward, missedLessons, activeLesson] =
     await Promise.all([
       db.lesson.findMany({
         where: {
           childId,
           dayDate: { gte: window.from, lte: window.to },
         },
+        include: { objectives: true },
         orderBy: { dayDate: "asc" },
       }),
       db.lesson.count({ where: { childId } }),
@@ -143,6 +144,14 @@ export async function GET(req: Request) {
         orderBy: { dayDate: "desc" },
         include: { objectives: true },
         take: 20,
+      }),
+      db.lesson.findFirst({
+        where: {
+          childId,
+          status: "IN_PROGRESS",
+        },
+        include: { objectives: true },
+        orderBy: { updatedAt: "desc" },
       }),
     ]);
 
@@ -176,10 +185,25 @@ export async function GET(req: Request) {
     rangeTo: window.to.toISOString(),
     // Kept under the original key name so existing callers don't break;
     // semantically these are now "lessons in the selected window".
-    todaysLessons: rangeLessons.map((l) => ({
-      ...l,
-      parsedContent: safeParseJson(l.generatedContent),
-    })),
+    todaysLessons: rangeLessons.map((l) => {
+      const total = l.objectives.length;
+      const done = l.objectives.filter((o) => o.completed).length;
+      return {
+        ...l,
+        objectivesDone: done,
+        objectivesTotal: total,
+        parsedContent: safeParseJson(l.generatedContent),
+      };
+    }),
+    // Currently active / in-progress lesson (if any) across any day
+    activeLesson: activeLesson
+      ? {
+          ...activeLesson,
+          objectivesDone: activeLesson.objectives.filter((o) => o.completed).length,
+          objectivesTotal: activeLesson.objectives.length,
+          parsedContent: safeParseJson(activeLesson.generatedContent),
+        }
+      : null,
     // Past 14 days of lessons the parent hasn't marked complete. Each entry
     // includes objectiveStats so the UI can distinguish "not started" from
     // "partially completed".
@@ -192,6 +216,9 @@ export async function GET(req: Request) {
         topic: l.topic,
         dayDate: l.dayDate.toISOString(),
         status: l.status,
+        durationMins: l.durationMins,
+        activeSeconds: l.activeSeconds,
+        isPaused: l.isPaused,
         objectivesDone: done,
         objectivesTotal: total,
         parsedContent: safeParseJson(l.generatedContent),

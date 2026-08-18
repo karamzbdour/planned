@@ -26,7 +26,9 @@ export async function POST(
     where: { id: params.id },
     data: {
       status: "IN_PROGRESS",
-      startedAt: new Date(),
+      isPaused: false,
+      startedAt: lesson.startedAt ?? new Date(),
+      lastActiveAt: new Date(),
     },
   });
 

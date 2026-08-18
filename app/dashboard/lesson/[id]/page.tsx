@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams} from "next/navigation";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
   Clock,
   MapPin,
   Play,
+  Pause,
   Sparkles,
   BookOpen,
   Youtube,
@@ -28,6 +29,9 @@ import { AddEntryModal } from "@/components/journal/add-entry-modal";
 import { ObjectiveList } from "@/components/lesson/objective-list";
 import { QuizSection } from "@/components/lesson/quiz-section";
 import { LessonChat } from "@/components/lesson/lesson-chat";
+import { StickyLessonHud } from "@/components/lesson/sticky-lesson-hud";
+import { IdleBanner } from "@/components/lesson/idle-banner";
+import { useLessonTimer, formatLessonTime } from "@/hooks/use-lesson-timer";
 import { cn } from "@/lib/utils";
 import type { FullLessonContent, ActivityType } from "@/lib/lessonGenerator";
 
@@ -46,6 +50,8 @@ interface LessonData {
   topic: string;
   status: string;
   durationMins: number;
+  activeSeconds?: number;
+  isPaused?: boolean;
   startedAt: string | null;
   completedAt: string | null;
   child: {
@@ -195,10 +201,6 @@ export default function LessonDetailPage() {
   }
 
   // ── Start / Mark complete / timer ────────────────────────────────────────
-  // These used to live on the lesson preview card on the dashboard, but the
-  // client asked to keep the preview clean (just "View lesson") and put the
-  // start/complete flow inside the lesson itself.
-  const [timerSeconds, setTimerSeconds] = useState(0);
   const [statusLoading, setStatusLoading] = useState(false);
   const [showJournalPrompt, setShowJournalPrompt] = useState(false);
   const [showJournalModal, setShowJournalModal] = useState(false);
@@ -207,24 +209,42 @@ export default function LessonDetailPage() {
     previousLevel: string;
     newLevel: string;
   } | null>(null);
+  const [showStickyHud, setShowStickyHud] = useState(false);
+  const timerCardRef = useRef<HTMLDivElement>(null);
 
+  const {
+    activeSeconds,
+    isPaused,
+    isIdle,
+    pause,
+    resume,
+    dismissIdle,
+    formatElapsed,
+  } = useLessonTimer({
+    lessonId,
+    initialSeconds: lesson?.activeSeconds ?? 0,
+    status: lesson?.status ?? "PENDING",
+    initialPaused: lesson?.isPaused ?? false,
+  });
+
+  // IntersectionObserver to show sticky HUD when scrolled past timer card
   useEffect(() => {
-    if (lesson?.status !== "IN_PROGRESS" || !lesson.startedAt) return;
-    const startedAtMs = new Date(lesson.startedAt).getTime();
-    const tick = () => setTimerSeconds(Math.floor((Date.now() - startedAtMs) / 1000));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [lesson?.status, lesson?.startedAt]);
+    const el = timerCardRef.current;
+    if (!el || lesson?.status !== "IN_PROGRESS") {
+      setShowStickyHud(false);
+      return;
+    }
 
-  function formatElapsed(s: number) {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const ss = s % 60;
-    if (h > 0)
-      return `${h}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-    return `${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-  }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowStickyHud(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [lesson?.status]);
 
   async function handleStart() {
     if (!lesson) return;
@@ -233,7 +253,14 @@ export default function LessonDetailPage() {
       const res = await fetch(`/api/lessons/${lesson.id}/start`, { method: "POST" });
       if (res.ok) {
         setLesson((prev) =>
-          prev ? { ...prev, status: "IN_PROGRESS", startedAt: new Date().toISOString() } : prev,
+          prev
+            ? {
+                ...prev,
+                status: "IN_PROGRESS",
+                isPaused: false,
+                startedAt: prev.startedAt ?? new Date().toISOString(),
+              }
+            : prev,
         );
       }
     } finally {
@@ -245,12 +272,22 @@ export default function LessonDetailPage() {
     if (!lesson) return;
     setStatusLoading(true);
     try {
-      const res = await fetch(`/api/lessons/${lesson.id}/complete`, { method: "POST" });
+      const res = await fetch(`/api/lessons/${lesson.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeSeconds }),
+      });
       if (res.ok) {
         const data = await res.json();
         setLesson((prev) =>
           prev
-            ? { ...prev, status: "COMPLETED", completedAt: new Date().toISOString() }
+            ? {
+                ...prev,
+                status: "COMPLETED",
+                completedAt: new Date().toISOString(),
+                activeSeconds,
+                durationMins: data.lesson?.durationMins ?? Math.max(1, Math.round(activeSeconds / 60)),
+              }
             : prev,
         );
         setShowJournalPrompt(true);
@@ -462,7 +499,10 @@ export default function LessonDetailPage() {
 
       {/* Start / Complete / Timer — print-hidden because it doesn't apply
           to the printed worksheet flow. */}
-      <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-4 py-3 flex items-center justify-between gap-3 print:hidden">
+      <div
+        ref={timerCardRef}
+        className="bg-white rounded-2xl border border-[hsl(var(--border))] px-4 py-3 flex items-center justify-between gap-3 print:hidden"
+      >
         {lesson.status === "PENDING" && (
           <>
             <p className="text-sm text-muted-foreground">
@@ -471,12 +511,12 @@ export default function LessonDetailPage() {
             <button
               onClick={handleStart}
               disabled={statusLoading}
-              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm"
             >
               {statusLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Play className="w-3.5 h-3.5" />
+                <Play className="w-3.5 h-3.5 fill-current" />
               )}
               Start lesson
             </button>
@@ -484,17 +524,66 @@ export default function LessonDetailPage() {
         )}
         {lesson.status === "IN_PROGRESS" && (
           <>
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="inline-flex items-center gap-1.5 bg-brand-mint text-brand-green text-sm font-semibold px-3 py-1.5 rounded-lg">
-                <span className="w-2 h-2 rounded-full bg-brand-green animate-pulse" />
-                {formatElapsed(timerSeconds)}
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors select-none",
+                  isPaused || isIdle
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-brand-mint text-brand-green"
+                )}
+              >
+                <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
+                  {!isPaused && !isIdle && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-green opacity-75" />
+                  )}
+                  <span
+                    className={cn(
+                      "relative inline-flex h-2 w-2 rounded-full",
+                      isPaused || isIdle ? "bg-amber-500" : "bg-brand-green"
+                    )}
+                  />
+                </span>
+                <span className="font-mono tabular-nums tracking-tight min-w-[3.25rem] text-center">
+                  {formatElapsed()}
+                </span>
+                {isIdle ? (
+                  <span className="text-[10px] uppercase font-bold text-amber-700 ml-1">Idle</span>
+                ) : isPaused ? (
+                  <span className="text-[10px] uppercase font-bold text-amber-700 ml-1">Paused</span>
+                ) : null}
               </span>
-              <p className="text-xs text-muted-foreground hidden sm:block">In progress</p>
+
+              {/* Pause / Resume Button */}
+              <button
+                onClick={isPaused || isIdle ? resume : pause}
+                className={cn(
+                  "inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors",
+                  isPaused || isIdle
+                    ? "bg-brand-green text-white hover:bg-brand-green-deep border-brand-green"
+                    : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border-[hsl(var(--border))]"
+                )}
+                title={isPaused || isIdle ? "Resume lesson timer" : "Pause lesson timer"}
+                aria-label={isPaused || isIdle ? "Resume lesson timer" : "Pause lesson timer"}
+              >
+                {isPaused || isIdle ? (
+                  <>
+                    <Play className="w-3 h-3 fill-current" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-3 h-3 fill-current" />
+                    Pause
+                  </>
+                )}
+              </button>
             </div>
+
             <button
               onClick={handleComplete}
               disabled={statusLoading}
-              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm"
             >
               {statusLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -509,14 +598,23 @@ export default function LessonDetailPage() {
           <div className="flex items-center gap-2 text-sm">
             <CheckCircle className="w-4 h-4 text-brand-green" />
             <span className="text-brand-green-deep font-semibold">Completed</span>
-            {lesson.startedAt && lesson.completedAt && (
+            {typeof lesson.activeSeconds === "number" && lesson.activeSeconds > 0 ? (
               <span className="text-muted-foreground">
-                · {Math.round((new Date(lesson.completedAt).getTime() - new Date(lesson.startedAt).getTime()) / 60000)} min
+                · {formatLessonTime(lesson.activeSeconds)} spent
               </span>
-            )}
+            ) : lesson.durationMins > 0 ? (
+              <span className="text-muted-foreground">
+                · {lesson.durationMins} min spent
+              </span>
+            ) : null}
           </div>
         )}
       </div>
+
+      {/* Idle notification banner */}
+      {isIdle && (
+        <IdleBanner onResume={dismissIdle} onDismiss={dismissIdle} />
+      )}
 
       {/* Mastery level up celebration banner */}
       {masteryLevelUp && (
@@ -830,6 +928,19 @@ export default function LessonDetailPage() {
 
       {/* Floating Ask-AI button — context-aware to this lesson */}
       <LessonChat lessonId={lessonId} />
+
+      {/* Sticky floating pill HUD in top right when scrolled past top timer */}
+      <StickyLessonHud
+        status={lesson.status}
+        isPaused={isPaused}
+        isIdle={isIdle}
+        formattedTime={formatElapsed()}
+        statusLoading={statusLoading}
+        onPause={pause}
+        onResume={resume}
+        onComplete={handleComplete}
+        isVisible={showStickyHud}
+      />
     </div>
   );
 }

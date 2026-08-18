@@ -122,16 +122,16 @@ export function LessonChat({ lessonId }: LessonChatProps) {
         </button>
       )}
 
-      {/* Slide-out panel */}
+      {/* Slide-out / floating panel */}
       {open && (
-        <div className="fixed inset-0 z-40 print:hidden">
-          {/* Backdrop */}
+        <div className="fixed inset-0 z-40 pointer-events-none print:hidden">
+          {/* Backdrop on mobile */}
           <div
-            className="absolute inset-0 bg-black/30 md:bg-transparent"
+            className="absolute inset-0 bg-black/30 md:hidden pointer-events-auto"
             onClick={() => setOpen(false)}
           />
-          {/* Panel */}
-          <div className="absolute right-0 top-0 h-full w-full md:max-w-md bg-white shadow-xl flex flex-col">
+          {/* Panel — compact floating card in bottom-right to keep top-right timer HUD clear */}
+          <div className="pointer-events-auto absolute bottom-0 right-0 w-full max-h-[75vh] rounded-t-2xl md:bottom-6 md:right-6 md:top-auto md:h-[480px] md:max-h-[calc(100vh-120px)] md:w-96 md:rounded-2xl bg-white border border-[hsl(var(--border))] shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-3 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--border))]">
               <div className="flex items-center gap-2.5 min-w-0">

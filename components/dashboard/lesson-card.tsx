@@ -1,9 +1,10 @@
 "use client";
 
-import { CheckCircle, Clock, ChevronRight } from "lucide-react";
+import { CheckCircle, Clock, ChevronRight, Pause } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { formatLessonTime } from "@/hooks/use-lesson-timer";
 
 // Subject → colour mapping
 const SUBJECT_COLORS: Record<string, string> = {
@@ -34,6 +35,8 @@ interface LessonCardProps {
     topic: string;
     status: string;
     durationMins: number;
+    activeSeconds?: number;
+    isPaused?: boolean;
     startedAt: string | null;
     completedAt: string | null;
     parsedContent: {
@@ -97,9 +100,29 @@ export function LessonCard({ lesson, subjectProgress }: LessonCardProps) {
           </span>
         )}
         {status === "IN_PROGRESS" && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-green bg-brand-mint px-2.5 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
-            In progress
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full",
+              lesson.isPaused
+                ? "bg-amber-100 text-amber-800"
+                : "bg-brand-mint text-brand-green"
+            )}
+          >
+            {lesson.isPaused ? (
+              <>
+                <Pause className="w-3 h-3 fill-current text-amber-600" />
+                {typeof lesson.activeSeconds === "number" && lesson.activeSeconds > 0
+                  ? `Paused · ${formatLessonTime(lesson.activeSeconds)}`
+                  : "Paused"}
+              </>
+            ) : (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-green animate-pulse" />
+                {typeof lesson.activeSeconds === "number" && lesson.activeSeconds > 0
+                  ? `In progress · ${formatLessonTime(lesson.activeSeconds)}`
+                  : "In progress"}
+              </>
+            )}
           </span>
         )}
         {status === "COMPLETED" && (
