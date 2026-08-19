@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useActiveChild } from "@/contexts/active-child";
 import { AddEntryModal } from "@/components/journal/add-entry-modal";
+import {
+  ACTIVITY_TEMPLATES,
+  ActivityTemplate,
+} from "@/lib/activity-templates";
 import {
   Loader2,
   Plus,
   FileText,
   LayoutGrid,
   AlignLeft,
-  Image as ImageIcon,
   MapPin,
   Sparkles,
   Palette,
@@ -21,6 +24,8 @@ import {
   Tag as TagIcon,
   Trash2,
   Clock,
+  Compass,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +57,8 @@ interface JournalData {
   };
   entries: JournalEntry[];
 }
+
+type FilterCategory = "all" | "day_out" | "creative" | "breakthrough" | "photos";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -175,7 +182,7 @@ function EntryViewerModal({
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Photo or colour header */}
         {entry.photoUrl ? (
           <div className="relative w-full h-48 sm:rounded-t-2xl overflow-hidden">
@@ -183,7 +190,7 @@ function EntryViewerModal({
             <img src={entry.photoUrl} alt={entry.title} className="w-full h-full object-cover" />
             <button
               onClick={onClose}
-              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 flex items-center justify-center"
+              className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
             >
               <X className="w-4 h-4 text-white" />
             </button>
@@ -245,7 +252,7 @@ function EntryViewerModal({
           {entry.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {entry.tags.map((t) => (
-                <span key={t} className="text-xs bg-brand-mint text-brand-green-deep px-2 py-0.5 rounded-full">
+                <span key={t} className="text-xs bg-brand-mint text-brand-green-deep px-2 py-0.5 rounded-full font-medium">
                   #{t}
                 </span>
               ))}
@@ -286,7 +293,7 @@ function ScrapbookCard({
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
       className={cn(
-        "bg-white rounded-2xl border border-[hsl(var(--border))] overflow-hidden cursor-pointer hover:shadow-md hover:border-brand-green/20 transition-all break-inside-avoid mb-3",
+        "bg-white rounded-2xl border border-[hsl(var(--border))] overflow-hidden cursor-pointer hover:shadow-md hover:border-brand-green/30 transition-all break-inside-avoid mb-3 group",
         featured && "col-span-2"
       )}
     >
@@ -294,7 +301,11 @@ function ScrapbookCard({
       {entry.photoUrl ? (
         <div className={cn("w-full overflow-hidden", featured ? "h-48" : "h-28")}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={entry.photoUrl} alt={entry.title} className="w-full h-full object-cover" />
+          <img
+            src={entry.photoUrl}
+            alt={entry.title}
+            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+          />
         </div>
       ) : (
         <div className={cn("w-full bg-gradient-to-br", subjectBg(entry.subject), featured ? "h-28" : "h-14")} />
@@ -434,12 +445,14 @@ type ViewMode = "scrapbook" | "timeline";
 
 export default function JournalPage() {
   const { activeChild } = useActiveChild();
-  const [data, setData]           = useState<JournalData | null>(null);
-  const [loading, setLoading]     = useState(false);
-  const [view, setView]           = useState<ViewMode>("scrapbook");
-  const [showAdd, setShowAdd]     = useState(false);
-  const [viewing, setViewing]     = useState<JournalEntry | null>(null);
-  const [paywalled, setPaywalled] = useState(false);
+  const [data, setData]                       = useState<JournalData | null>(null);
+  const [loading, setLoading]                 = useState(false);
+  const [view, setView]                       = useState<ViewMode>("scrapbook");
+  const [showAdd, setShowAdd]                 = useState(false);
+  const [initialTemplateId, setInitialTemplateId] = useState<string | undefined>(undefined);
+  const [viewing, setViewing]                 = useState<JournalEntry | null>(null);
+  const [paywalled, setPaywalled]             = useState(false);
+  const [filterCategory, setFilterCategory]   = useState<FilterCategory>("all");
 
   const fetchData = useCallback(async (childId: string) => {
     setLoading(true);
@@ -475,6 +488,39 @@ export default function JournalPage() {
         : prev
     );
   }
+
+  function handleOpenWithTemplate(templateId?: string) {
+    setInitialTemplateId(templateId);
+    setShowAdd(true);
+  }
+
+  // Filtered entries
+  const filteredEntries = useMemo(() => {
+    if (!data?.entries) return [];
+    return data.entries.filter((entry) => {
+      if (filterCategory === "day_out") return entry.moment === "DAY_OUT";
+      if (filterCategory === "creative") return entry.moment === "CREATIVE";
+      if (filterCategory === "breakthrough") return entry.moment === "BREAKTHROUGH";
+      if (filterCategory === "photos") return entry.hasPhoto;
+      return true;
+    });
+  }, [data?.entries, filterCategory]);
+
+  // Timeline grouping for filtered entries
+  const groupedTimeline = useMemo(() => {
+    const groups: { weekKey: string; label: string; entries: JournalEntry[] }[] = [];
+    for (const entry of filteredEntries) {
+      const d = new Date(entry.entryDate);
+      const weekKey = `${d.getFullYear()}-${String(getISOWeek(d)).padStart(2, "0")}`;
+      const existing = groups.find((g) => g.weekKey === weekKey);
+      if (existing) {
+        existing.entries.push(entry);
+      } else {
+        groups.push({ weekKey, label: weekLabel(entry.entryDate), entries: [entry] });
+      }
+    }
+    return groups;
+  }, [filteredEntries]);
 
   if (paywalled) {
     return (
@@ -513,26 +559,17 @@ export default function JournalPage() {
 
   const { child, stats, entries } = data;
 
-  // ── Timeline grouping ────────────────────────────────────────────────────────
-  const grouped: { weekKey: string; label: string; entries: JournalEntry[] }[] = [];
-  for (const entry of entries) {
-    const d = new Date(entry.entryDate);
-    const weekKey = `${d.getFullYear()}-${String(getISOWeek(d)).padStart(2, "0")}`;
-    const existing = grouped.find((g) => g.weekKey === weekKey);
-    if (existing) {
-      existing.entries.push(entry);
-    } else {
-      grouped.push({ weekKey, label: weekLabel(entry.entryDate), entries: [entry] });
-    }
-  }
-
   return (
     <>
       {showAdd && activeChild && (
         <AddEntryModal
           childId={activeChild.id}
           childName={child.name}
-          onClose={() => setShowAdd(false)}
+          initialTemplateId={initialTemplateId}
+          onClose={() => {
+            setShowAdd(false);
+            setInitialTemplateId(undefined);
+          }}
           onSaved={() => fetchData(activeChild.id)}
         />
       )}
@@ -547,20 +584,25 @@ export default function JournalPage() {
       <div className="px-5 py-6 max-w-2xl mx-auto space-y-5">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
-          <h1 className="font-display text-xl font-bold text-brand-green-deep">
-            Journal
-          </h1>
+          <div>
+            <h1 className="font-display text-xl font-bold text-brand-green-deep">
+              Journal & Activities
+            </h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Portfolio of {child.name}&apos;s real-world learning and milestones
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             <Link
               href="/dashboard/journal/pdf"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground border border-[hsl(var(--border))] bg-white hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-muted-foreground border border-[hsl(var(--border))] bg-white hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors"
             >
               <FileText className="w-4 h-4" />
               PDF keepsake
             </Link>
             <button
-              onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-3.5 py-2 rounded-xl transition-colors"
+              onClick={() => handleOpenWithTemplate(undefined)}
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-3.5 py-2 rounded-xl transition-colors shadow-xs"
             >
               <Plus className="w-4 h-4" />
               Add entry
@@ -588,37 +630,94 @@ export default function JournalPage() {
           ))}
         </div>
 
-        {/* View toggle */}
+        {/* ── Quick Log Real-World Activity Tray ────────────────────────────── */}
+        <div className="bg-gradient-to-br from-brand-mint/60 via-brand-mint/30 to-white p-4 rounded-2xl border border-brand-green/20 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-green-deep flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5 text-brand-green" />
+              <span>Quick Log Real-World Learning</span>
+            </p>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+              Pre-filled duration & tags
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {ACTIVITY_TEMPLATES.map((tmpl) => (
+              <button
+                key={tmpl.id}
+                onClick={() => handleOpenWithTemplate(tmpl.id)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-brand-green/25 hover:border-brand-green hover:shadow-xs text-xs font-medium text-brand-green-deep transition-all shrink-0 group"
+              >
+                <span className="group-hover:scale-110 transition-transform">
+                  {tmpl.emoji}
+                </span>
+                <span>{tmpl.shortLabel}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Filter Bar & View Toggle ──────────────────────────────────────── */}
         {entries.length > 0 && (
-          <div className="inline-flex bg-muted rounded-xl p-1 gap-1">
-            <button
-              onClick={() => setView("scrapbook")}
-              className={cn(
-                "inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all",
-                view === "scrapbook"
-                  ? "bg-white text-brand-green-deep shadow-sm"
-                  : "text-muted-foreground hover:text-brand-green-deep"
-              )}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              Scrapbook
-            </button>
-            <button
-              onClick={() => setView("timeline")}
-              className={cn(
-                "inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all",
-                view === "timeline"
-                  ? "bg-white text-brand-green-deep shadow-sm"
-                  : "text-muted-foreground hover:text-brand-green-deep"
-              )}
-            >
-              <AlignLeft className="w-3.5 h-3.5" />
-              Timeline
-            </button>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            {/* Category filters */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+              {(
+                [
+                  { id: "all", label: `All (${entries.length})` },
+                  { id: "day_out", label: "🚗 Day Trips" },
+                  { id: "creative", label: "🎨 Creative" },
+                  { id: "breakthrough", label: "✨ Breakthroughs" },
+                  { id: "photos", label: "📸 Photos" },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFilterCategory(f.id)}
+                  className={cn(
+                    "text-xs px-2.5 py-1.5 rounded-xl border transition-all shrink-0 font-medium",
+                    filterCategory === f.id
+                      ? "bg-brand-green text-white border-brand-green shadow-xs"
+                      : "bg-white border-[hsl(var(--border))] text-muted-foreground hover:text-brand-green-deep hover:border-brand-green/30"
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* View toggle */}
+            <div className="inline-flex bg-muted rounded-xl p-1 gap-1 shrink-0">
+              <button
+                onClick={() => setView("scrapbook")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-all",
+                  view === "scrapbook"
+                    ? "bg-white text-brand-green-deep shadow-sm"
+                    : "text-muted-foreground hover:text-brand-green-deep"
+                )}
+              >
+                <LayoutGrid className="w-3 h-3" />
+                Scrapbook
+              </button>
+              <button
+                onClick={() => setView("timeline")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-all",
+                  view === "timeline"
+                    ? "bg-white text-brand-green-deep shadow-sm"
+                    : "text-muted-foreground hover:text-brand-green-deep"
+                )}
+              >
+                <AlignLeft className="w-3 h-3" />
+                Timeline
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state (no entries at all) */}
         {entries.length === 0 && (
           <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-12 text-center">
             <p className="text-3xl mb-3">📓</p>
@@ -626,11 +725,11 @@ export default function JournalPage() {
               No journal entries yet
             </p>
             <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Record memories, breakthroughs, and day trips as you go.
+              Record memories, breakthroughs, practical life skills, and day trips as you go.
             </p>
             <button
-              onClick={() => setShowAdd(true)}
-              className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2.5 rounded-xl transition-colors"
+              onClick={() => handleOpenWithTemplate(undefined)}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2.5 rounded-xl transition-colors shadow-xs"
             >
               <Plus className="w-4 h-4" />
               Write first entry
@@ -638,10 +737,29 @@ export default function JournalPage() {
           </div>
         )}
 
+        {/* Empty filter result state */}
+        {entries.length > 0 && filteredEntries.length === 0 && (
+          <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-8 text-center">
+            <p className="text-xl mb-2">🔍</p>
+            <p className="font-semibold text-sm text-brand-green-deep">
+              No entries match this filter
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
+              Try switching back to &apos;All&apos; or log an activity with this category.
+            </p>
+            <button
+              onClick={() => setFilterCategory("all")}
+              className="text-xs font-semibold text-brand-green hover:underline"
+            >
+              Show all entries
+            </button>
+          </div>
+        )}
+
         {/* ── Scrapbook view ──────────────────────────────────────────────── */}
-        {view === "scrapbook" && entries.length > 0 && (
+        {view === "scrapbook" && filteredEntries.length > 0 && (
           <div className="columns-1 sm:columns-2 gap-3">
-            {entries.map((entry) => (
+            {filteredEntries.map((entry) => (
               <ScrapbookCard
                 key={entry.id}
                 entry={entry}
@@ -652,9 +770,9 @@ export default function JournalPage() {
         )}
 
         {/* ── Timeline view ───────────────────────────────────────────────── */}
-        {view === "timeline" && entries.length > 0 && (
+        {view === "timeline" && filteredEntries.length > 0 && (
           <div className="space-y-6">
-            {grouped.map((group) => (
+            {groupedTimeline.map((group) => (
               <div key={group.weekKey}>
                 <h2 className="font-display font-semibold text-sm text-muted-foreground mb-3">
                   {group.label}

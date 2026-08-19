@@ -9,6 +9,13 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Menu,
   CalendarCheck,
   LayoutDashboard,
@@ -16,6 +23,9 @@ import {
   Flower2,
   BookOpen,
   Settings,
+  ChevronDown,
+  Check,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,12 +38,12 @@ const BOTTOM_NAV = [
 ];
 
 function DashboardHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
-  const { activeChild } = useActiveChild();
+  const { allChildren, activeChild, setActiveChildId } = useActiveChild();
   const { breadcrumbs } = useBreadcrumbs();
   const isSubPage = breadcrumbs.length > 1;
 
   return (
-    <header className="h-14 bg-white/90 backdrop-blur-sm border-b border-[hsl(var(--border))] flex items-center justify-between px-4 md:px-6 shrink-0 z-10">
+    <header className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-[hsl(var(--border))] h-14 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-20 shadow-2xs">
       {/* Left: Mobile hamburger or breadcrumbs / brand */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2">
         <Button
@@ -75,17 +85,82 @@ function DashboardHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
         </div>
       </div>
 
-      {/* Right: Active Child Pill / Quick Switch */}
+      {/* Right: Compact Sticky Child Selector Dropdown (Mobile only — desktop uses sidebar switcher) */}
       {activeChild && (
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-mint/60 border border-brand-green/20 shadow-2xs">
-            <div className="w-5 h-5 rounded-full bg-brand-green text-white text-[10px] font-bold flex items-center justify-center">
-              {activeChild.name[0]?.toUpperCase()}
-            </div>
-            <span className="text-xs font-semibold text-brand-green-deep max-w-[100px] truncate">
-              {activeChild.name}
-            </span>
-          </div>
+        <div className="flex md:hidden items-center gap-2 shrink-0">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-full bg-brand-mint/70 hover:bg-brand-mint border border-brand-green/25 hover:border-brand-green/40 transition-all shadow-2xs text-left group cursor-pointer"
+                aria-label={`Current child: ${activeChild.name}. Tap to switch child`}
+              >
+                <div className="w-5 h-5 rounded-full bg-brand-green text-white text-[10px] font-bold flex items-center justify-center shrink-0 shadow-2xs">
+                  {activeChild.name[0]?.toUpperCase() ?? "?"}
+                </div>
+                <span className="text-xs font-semibold text-brand-green-deep max-w-[85px] sm:max-w-[120px] truncate">
+                  {activeChild.name}
+                </span>
+                <ChevronDown className="w-3 h-3 text-brand-green-deep/60 group-hover:text-brand-green-deep shrink-0 transition-transform duration-200" />
+              </button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-2xl shadow-xl border border-[hsl(var(--border))] z-50 bg-white">
+              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span>Children</span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {allChildren.length} {allChildren.length === 1 ? "child" : "children"}
+                </span>
+              </div>
+              {allChildren.map((child) => {
+                const isSelected = child.id === activeChild.id;
+                return (
+                  <DropdownMenuItem
+                    key={child.id}
+                    onClick={() => setActiveChildId(child.id)}
+                    className={cn(
+                      "flex items-center gap-2.5 px-2.5 py-2 rounded-xl cursor-pointer text-xs transition-colors",
+                      isSelected ? "bg-brand-mint/70 font-semibold text-brand-green-deep" : "hover:bg-muted/60"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0",
+                        isSelected
+                          ? "bg-brand-green text-white"
+                          : "bg-muted text-foreground"
+                      )}
+                    >
+                      {child.name[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate font-medium text-xs text-brand-green-deep">
+                        {child.name}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {child.yearGroup ?? (child.age ? `Age ${child.age}` : "Student")}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <Check className="w-3.5 h-3.5 text-brand-green shrink-0" />
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator className="my-1" />
+              <DropdownMenuItem asChild className="p-0">
+                <Link
+                  href="/onboarding/child"
+                  className="flex items-center gap-2 px-2.5 py-2 rounded-xl cursor-pointer text-xs text-brand-green font-medium hover:bg-brand-mint/40 transition-colors"
+                >
+                  <div className="w-6 h-6 rounded-full bg-brand-mint flex items-center justify-center text-brand-green shrink-0">
+                    <Plus className="w-3.5 h-3.5" />
+                  </div>
+                  <span>Add another child</span>
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
     </header>

@@ -4,8 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useActiveChild } from "@/contexts/active-child";
 import { CircularProgress } from "@/components/progress/circular-progress";
-import { LogActivityModal } from "@/components/progress/log-activity-modal";
-import { Progress } from "@/components/ui/progress";
+import { AddEntryModal } from "@/components/journal/add-entry-modal";
 import {
   Loader2,
   Plus,
@@ -65,11 +64,6 @@ interface ProgressData {
   termInfo: { week: number; term: string; totalWeeks: number };
   subjects: SubjectRow[];
   recentActivity: ActivityItem[];
-}
-
-interface ObjectiveChip {
-  id: string;
-  text: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -191,7 +185,6 @@ export default function ProgressPage() {
   const [loading, setLoading] = useState(false);
   const [animate, setAnimate] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [objectives, setObjectives] = useState<ObjectiveChip[]>([]);
 
   const fetchData = useCallback(async (childId: string) => {
     setLoading(true);
@@ -201,12 +194,6 @@ export default function ProgressPage() {
       if (res.ok) {
         const json: ProgressData = await res.json();
         setData(json);
-        // Fetch objectives for log activity modal
-        const objRes = await fetch(`/api/lessons/objectives?childId=${childId}`).catch(() => null);
-        if (objRes?.ok) {
-          const objData = await objRes.json();
-          setObjectives(objData.objectives ?? []);
-        }
         // Trigger bar animations after data loads
         requestAnimationFrame(() => setTimeout(() => setAnimate(true), 50));
       }
@@ -232,10 +219,10 @@ export default function ProgressPage() {
 
   return (
     <>
-      {showModal && (
-        <LogActivityModal
+      {showModal && activeChild && (
+        <AddEntryModal
           childId={activeChild.id}
-          objectives={objectives}
+          childName={activeChild.name}
           onClose={() => setShowModal(false)}
           onSaved={() => fetchData(activeChild.id)}
         />
