@@ -26,7 +26,7 @@ export async function GET(
   });
   if (!child) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [lessons, progressRow, externalActivities] = await Promise.all([
+  const [lessons, progressRow, externalActivities, journalEntries] = await Promise.all([
     db.lesson.findMany({
       where: { childId, subject },
       include: { objectives: { orderBy: { id: "asc" } } },
@@ -38,6 +38,21 @@ export async function GET(
     db.externalActivity.findMany({
       where: { childId, subject },
       orderBy: { activityDate: "desc" },
+    }),
+    db.journalEntry.findMany({
+      where: {
+        childId,
+        OR: [
+          { subject: { equals: subject, mode: "insensitive" } },
+          ...(subject.toLowerCase() === "mathematics" || subject.toLowerCase() === "maths"
+            ? [{ subject: { in: ["Maths", "Mathematics", "maths", "mathematics"] } }]
+            : []),
+          ...(subject.toLowerCase() === "english" || subject.toLowerCase() === "literacy"
+            ? [{ subject: { in: ["English", "Literacy", "english", "literacy"] } }]
+            : []),
+        ],
+      },
+      orderBy: { entryDate: "desc" },
     }),
   ]);
 
@@ -109,6 +124,17 @@ export async function GET(
       description: a.description,
       durationMins: a.durationMins,
       activityDate: a.activityDate.toISOString(),
+    })),
+    journalEntries: journalEntries.map((j) => ({
+      id: j.id,
+      title: j.title,
+      notes: j.notes,
+      moment: j.moment,
+      hasPhoto: j.hasPhoto,
+      photoUrl: j.photoUrl,
+      durationMins: ((j as unknown as { durationMins?: number | null }).durationMins) ?? 0,
+      tags: JSON.parse(j.tags || "[]") as string[],
+      entryDate: j.entryDate.toISOString(),
     })),
   });
 }

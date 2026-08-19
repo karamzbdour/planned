@@ -20,6 +20,7 @@ import {
   Camera,
   Tag as TagIcon,
   Trash2,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ interface JournalEntry {
   moment: string;
   hasPhoto: boolean;
   photoUrl: string | null;
+  durationMins?: number | null;
   tags: string[];
   entryDate: string;
   createdAt: string;
@@ -46,6 +48,7 @@ interface JournalData {
     withPhotos: number;
     dayTrips: number;
     weeksCovered: number;
+    totalMinutes?: number;
   };
   entries: JournalEntry[];
 }
@@ -206,6 +209,12 @@ function EntryViewerModal({
                   {meta.icon}
                   {meta.label}
                 </span>
+                {entry.durationMins && entry.durationMins > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-brand-mint text-brand-green-deep font-medium">
+                    <Clock className="w-3 h-3" />
+                    {entry.durationMins}m
+                  </span>
+                ) : null}
               </div>
               <h2 className="font-display font-bold text-brand-green-deep text-lg leading-snug">
                 {entry.title}
@@ -304,6 +313,12 @@ function ScrapbookCard({
             {meta.icon}
             {meta.label}
           </span>
+          {entry.durationMins && entry.durationMins > 0 ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-mint text-brand-green-deep font-medium shrink-0">
+              <Clock className="w-2.5 h-2.5" />
+              {entry.durationMins}m
+            </span>
+          ) : null}
           {entry.hasPhoto && (
             <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">
               <Camera className="w-2.5 h-2.5" />
@@ -382,6 +397,12 @@ function TimelineEntry({
             {meta.icon}
             {meta.label}
           </span>
+          {entry.durationMins && entry.durationMins > 0 ? (
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-mint text-brand-green-deep font-medium">
+              <Clock className="w-2.5 h-2.5" />
+              {entry.durationMins}m
+            </span>
+          ) : null}
           {entry.hasPhoto && (
             <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
               <Camera className="w-2.5 h-2.5" />

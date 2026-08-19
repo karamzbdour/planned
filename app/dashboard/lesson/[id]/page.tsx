@@ -37,6 +37,8 @@ import {
 } from "@/components/lesson/lesson-completion-modal";
 import { useLessonTimer, formatLessonTime } from "@/hooks/use-lesson-timer";
 import { cn } from "@/lib/utils";
+import { useSetBreadcrumbTitle } from "@/contexts/breadcrumbs";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import type { FullLessonContent, ActivityType } from "@/lib/lessonGenerator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -162,6 +164,7 @@ export default function LessonDetailPage() {
   const [lesson, setLesson] = useState<LessonData | null>(null);
   const [content, setContent] = useState<FullLessonContent | null>(null);
   const [objectives, setObjectives] = useState<Objective[]>([]);
+  useSetBreadcrumbTitle(content?.title ?? lesson?.topic ?? "Lesson");
   const [phase, setPhase] = useState<"loading" | "generating" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   // Which refine intent is currently in-flight, if any. Drives the spinner
@@ -427,22 +430,12 @@ export default function LessonDetailPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-5 py-6 space-y-5 print:max-w-full print:px-0 print:py-0 print:space-y-3">
-      {/* Top bar: back + worksheet link.
-          The old "Print worksheet" button screen-grabbed the lesson which
-          the client called out as unhelpful — it now links to a dedicated
-          /worksheet page that generates practice questions tailored to the
-          lesson, with optional in-app completion for Premium users. */}
+      {/* Top bar: breadcrumbs + worksheet link */}
       <div className="flex items-center justify-between gap-3 print:hidden">
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-brand-green transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to dashboard
-        </Link>
+        <Breadcrumbs className="py-0 flex-1 min-w-0" />
         <Link
           href={`/dashboard/lesson/${lessonId}/worksheet`}
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-green hover:text-brand-green-deep bg-brand-mint hover:bg-brand-mint/80 px-3 py-1.5 rounded-lg transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-green hover:text-brand-green-deep bg-brand-mint hover:bg-brand-mint/80 px-3 py-1.5 rounded-lg transition-colors shrink-0"
         >
           <Printer className="w-4 h-4" />
           Worksheet

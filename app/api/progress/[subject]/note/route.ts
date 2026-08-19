@@ -39,6 +39,8 @@ export async function POST(
     totalObjectives,
     recentLesson,
     nextLesson,
+    recentJournalEntry,
+    recentExternalActivity,
   ] = await Promise.all([
     db.progress.findUnique({
       where: { childId_subject: { childId, subject } },
@@ -57,6 +59,27 @@ export async function POST(
       orderBy: { dayDate: "asc" },
       select: { topic: true },
     }),
+    db.journalEntry.findFirst({
+      where: {
+        childId,
+        OR: [
+          { subject: { equals: subject, mode: "insensitive" } },
+          ...(subject.toLowerCase() === "mathematics" || subject.toLowerCase() === "maths"
+            ? [{ subject: { in: ["Maths", "Mathematics", "maths", "mathematics"] } }]
+            : []),
+          ...(subject.toLowerCase() === "english" || subject.toLowerCase() === "literacy"
+            ? [{ subject: { in: ["English", "Literacy", "english", "literacy"] } }]
+            : []),
+        ],
+      },
+      orderBy: { entryDate: "desc" },
+      select: { title: true, moment: true, notes: true, hasPhoto: true },
+    }),
+    db.externalActivity.findFirst({
+      where: { childId, subject },
+      orderBy: { activityDate: "desc" },
+      select: { description: true, durationMins: true, notes: true },
+    }),
   ]);
 
   const abilityLevel =
@@ -72,20 +95,44 @@ export async function POST(
   const timeStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   const totalTopics = completedLessons + pendingLessons;
 
-  // Ultra-compact, token-efficient pedagogical prompt maintaining ~110-120 input tokens
+  const outOfAppItems: string[] = [];
+  if (recentJournalEntry) {
+    const momentLabel =
+      recentJournalEntry.moment === "DAY_OUT"
+        ? "Day out / field trip"
+        : recentJournalEntry.moment === "CREATIVE"
+        ? "Creative project"
+        : recentJournalEntry.moment === "BREAKTHROUGH"
+        ? "Breakthrough moment"
+        : "Real-world journal note";
+    outOfAppItems.push(
+      `Recent journal entry (${momentLabel}): "${recentJournalEntry.title}" - ${recentJournalEntry.notes.slice(0, 140)}${recentJournalEntry.hasPhoto ? " [Photo evidence attached]" : ""}`
+    );
+  }
+  if (recentExternalActivity) {
+    outOfAppItems.push(
+      `Recent external activity: "${recentExternalActivity.description}" (${recentExternalActivity.durationMins}m)${recentExternalActivity.notes ? ` - ${recentExternalActivity.notes.slice(0, 100)}` : ""}`
+    );
+  }
+  const outOfAppContext =
+    outOfAppItems.length > 0
+      ? `\nRecent out-of-app & real-world evidence:\n${outOfAppItems.join("\n")}`
+      : "";
+
+  // Ultra-compact, token-efficient pedagogical prompt
   const prompt = `You are an expert UK homeschool learning advisor. Provide a concise parent guidance hint assessing the child's progress in ${subject}.
 
 Child: ${child.name} (${child.yearGroup ?? "Primary age"})
 Subject: ${subject} | Level: ${abilityLevel} (EMERGING / DEVELOPING / SECURE / EXCEEDING scale)
 Progress: ${completedLessons}/${totalTopics} topics completed, ${metObjectives}/${totalObjectives} objectives met (${timeStr})${
-    recentLesson?.topic ? `\nRecent completed topic: "${recentLesson.topic}"` : ""
-  }${nextLesson?.topic ? `\nNext topic: "${nextLesson.topic}"` : ""}
+    recentLesson?.topic ? `\nRecent completed in-app topic: "${recentLesson.topic}"` : ""
+  }${nextLesson?.topic ? `\nNext in-app topic: "${nextLesson.topic}"` : ""}${outOfAppContext}
 
 Respond ONLY with a valid JSON object formatted as:
 {
-  "strength": "1 concise sentence on what ${child.name} is demonstrating strong capability or solid grasp in.",
+  "strength": "1 concise sentence on what ${child.name} is demonstrating strong capability or solid grasp in (can acknowledge their hands-on/offline or in-app learning).",
   "growth": "1 concise sentence on where they can improve or consolidate understanding.",
-  "nextStep": "1 concise, practical action or quick activity for the parent next."
+  "nextStep": "1 concise, practical action or real-world activity for the parent next."
 }`;
 
   try {

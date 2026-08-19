@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, Loader2, Camera, Tag } from "lucide-react";
+import { X, Loader2, Camera, Tag, Sparkles, Clock, Star, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,8 @@ const MOMENTS = [
   { value: "SPECIAL",     label: "Special memory",    emoji: "⭐" },
 ];
 
+const DURATION_PRESETS = [15, 30, 45, 60, 90];
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AddEntryModalProps {
@@ -56,19 +58,81 @@ export function AddEntryModal({
   onClose,
   onSaved,
 }: AddEntryModalProps) {
-  const [notes, setNotes]           = useState(prefill ? `Today we worked on "${prefill.topic}". ` : "");
-  const [subject, setSubject]       = useState(prefill?.subject ?? "");
-  const [title, setTitle]           = useState(prefill?.topic ?? "");
-  const [moment, setMoment]         = useState("REGULAR");
-  const [tagInput, setTagInput]     = useState("");
-  const [tags, setTags]             = useState<string[]>([]);
-  const [entryDate, setEntryDate]   = useState(new Date().toISOString().split("T")[0]);
-  const [photoUrl, setPhotoUrl]     = useState<string | null>(null);
+  const [notes, setNotes]                 = useState(prefill ? `Today we worked on "${prefill.topic}". ` : "");
+  const [subject, setSubject]             = useState(prefill?.subject ?? "");
+  const [title, setTitle]                 = useState(prefill?.topic ?? "");
+  const [moment, setMoment]               = useState("REGULAR");
+  const [durationMins, setDurationMins]   = useState<string>("");
+  const [tagInput, setTagInput]           = useState("");
+  const [tags, setTags]                   = useState<string[]>([]);
+  const [entryDate, setEntryDate]         = useState(new Date().toISOString().split("T")[0]);
+  const [photoUrl, setPhotoUrl]           = useState<string | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState("");
+  const [analyzing, setAnalyzing]         = useState(false);
+  const [suggestedSkills, setSuggestedSkills] = useState<string[]>([]);
+  const [learningSummary, setLearningSummary] = useState<string>("");
+  const [loading, setLoading]             = useState(false);
+  const [error, setError]                 = useState("");
 
   const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleAutoAnalyze() {
+    if (!notes.trim()) {
+      setError("Write a short description or notes first so AI can analyze it.");
+      return;
+    }
+    setAnalyzing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/journal/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: notes.trim(),
+          childId,
+          subject: subject || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "AI analysis failed");
+      }
+
+      const { analysis } = await res.json();
+      if (analysis) {
+        if (analysis.suggestedTitle && (!title || title.startsWith("Journal entry"))) {
+          setTitle(analysis.suggestedTitle);
+        }
+        if (analysis.suggestedSubject && !subject) {
+          const match = SUBJECTS.find(
+            (s) => s.label.toLowerCase() === analysis.suggestedSubject.toLowerCase()
+          );
+          if (match) setSubject(match.label);
+        }
+        if (analysis.suggestedMoment) {
+          setMoment(analysis.suggestedMoment);
+        }
+        if (Array.isArray(analysis.suggestedTags)) {
+          const newTags = analysis.suggestedTags.map((t: string) => t.toLowerCase().trim());
+          setTags((prev) => Array.from(new Set([...prev, ...newTags])));
+        }
+        if (analysis.estimatedDurationMins && !durationMins) {
+          setDurationMins(String(analysis.estimatedDurationMins));
+        }
+        if (Array.isArray(analysis.keySkills)) {
+          setSuggestedSkills(analysis.keySkills);
+        }
+        if (analysis.learningSummary) {
+          setLearningSummary(analysis.learningSummary);
+        }
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "AI analysis was unable to complete.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -118,6 +182,7 @@ export function AddEntryModal({
           moment,
           lessonId: prefill?.lessonId ?? undefined,
           photoUrl: photoUrl ?? undefined,
+          durationMins: durationMins ? parseInt(durationMins, 10) : undefined,
           tags,
           entryDate,
         }),
@@ -155,11 +220,27 @@ export function AddEntryModal({
         </div>
 
         <form onSubmit={handleSubmit} className="px-5 py-5 space-y-5">
-          {/* Notes — serif warm textarea */}
+          {/* Notes — serif warm textarea + AI Auto-Analyze button */}
           <div className="space-y-1.5">
-            <Label htmlFor="notes" className="text-sm font-medium text-brand-green-deep">
-              What happened? <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="notes" className="text-sm font-medium text-brand-green-deep">
+                What happened? <span className="text-destructive">*</span>
+              </Label>
+              <button
+                type="button"
+                onClick={handleAutoAnalyze}
+                disabled={analyzing || !notes.trim()}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-green hover:text-brand-green-deep disabled:opacity-50 transition-colors bg-brand-mint/60 hover:bg-brand-mint px-2.5 py-1 rounded-lg"
+                title="Automatically detects subject, moment, title, tags, and curriculum skills from notes"
+              >
+                {analyzing ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                )}
+                <span>{analyzing ? "Analyzing…" : "Auto-Fill with AI"}</span>
+              </button>
+            </div>
             <textarea
               id="notes"
               rows={5}
@@ -170,6 +251,39 @@ export function AddEntryModal({
               style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
             />
           </div>
+
+          {/* AI Curriculum Analysis Results Box */}
+          {(suggestedSkills.length > 0 || learningSummary) && (
+            <div className="bg-brand-mint/40 border border-brand-green/20 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-green-deep">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                <span>AI Curriculum Insights</span>
+              </div>
+              {learningSummary && (
+                <p className="text-xs text-brand-green-deep/90 leading-relaxed italic bg-white/70 rounded-lg p-2 border border-brand-green/10">
+                  &ldquo;{learningSummary}&rdquo;
+                </p>
+              )}
+              {suggestedSkills.length > 0 && (
+                <div className="space-y-1.5 pt-0.5">
+                  <p className="text-[11px] font-semibold text-brand-green-deep/80 uppercase tracking-wide">
+                    Identified Skills & Objectives:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestedSkills.map((skill, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 text-xs bg-white border border-brand-green/30 text-brand-green-deep px-2.5 py-1 rounded-lg font-medium shadow-xs"
+                      >
+                        <CheckCircle2 className="w-3 h-3 text-brand-green shrink-0" />
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Subject grid */}
           <div className="space-y-2">
@@ -219,6 +333,51 @@ export function AddEntryModal({
                   <span className="text-xs">{m.label}</span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Learning Duration (mins) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="duration" className="text-sm font-medium text-brand-green-deep flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                <span>Learning Time</span>
+                <span className="text-muted-foreground font-normal text-xs">(syncs to progress)</span>
+              </Label>
+              {durationMins && parseInt(durationMins, 10) > 0 && (
+                <span className="text-xs font-semibold text-brand-green">
+                  {durationMins} mins
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {DURATION_PRESETS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setDurationMins(durationMins === String(m) ? "" : String(m))}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
+                    durationMins === String(m)
+                      ? "bg-brand-mint border-brand-green text-brand-green-deep"
+                      : "bg-white border-[hsl(var(--border))] text-muted-foreground hover:border-brand-green/30"
+                  )}
+                >
+                  {m}m
+                </button>
+              ))}
+              <div className="flex-1 min-w-[110px]">
+                <Input
+                  id="duration"
+                  type="number"
+                  min="1"
+                  max="720"
+                  placeholder="Custom mins"
+                  value={durationMins}
+                  onChange={(e) => setDurationMins(e.target.value)}
+                  className="h-8 text-xs rounded-xl"
+                />
+              </div>
             </div>
           </div>
 
@@ -339,6 +498,19 @@ export function AddEntryModal({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Bloom Star Reward Hint */}
+          <div className="flex items-center justify-between px-3.5 py-2.5 bg-amber-50/80 border border-amber-200/60 rounded-xl text-xs text-amber-800">
+            <div className="flex items-center gap-1.5">
+              <Star className="w-4 h-4 fill-amber-400 text-amber-500 shrink-0" />
+              <span>
+                {photoUrl ? "+2 Bloom Stars (with photo)" : "+1 Bloom Star (+2 with photo attached)"}
+              </span>
+            </div>
+            <span className="text-[10px] font-semibold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-full">
+              Bloom Garden
+            </span>
           </div>
 
           {error && (

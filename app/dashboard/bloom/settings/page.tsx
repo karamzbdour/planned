@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useActiveChild } from "@/contexts/active-child";
+import { useSetBreadcrumbTitle } from "@/contexts/breadcrumbs";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import {
   Loader2,
   ArrowLeft,
@@ -45,6 +47,7 @@ interface SettingsData {
 
 export default function BloomSettingsPage() {
   const { activeChild } = useActiveChild();
+  useSetBreadcrumbTitle("Reward Settings");
   const [data, setData] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -145,11 +148,15 @@ export default function BloomSettingsPage() {
 
   return (
     <div className="px-5 py-6 max-w-2xl mx-auto space-y-5">
+      {/* Breadcrumbs */}
+      <Breadcrumbs className="-mb-2" />
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/bloom"
           className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors shrink-0"
+          title="Back to Bloom"
         >
           <ArrowLeft className="w-4 h-4 text-muted-foreground" />
         </Link>

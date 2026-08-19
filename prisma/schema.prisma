@@ -197,8 +197,9 @@ model JournalEntry {
   subject   String?
   // REGULAR | BREAKTHROUGH | DAY_OUT | CREATIVE | SPECIAL
   moment    String   @default("REGULAR")
-  hasPhoto  Boolean  @default(false)
-  photoUrl  String?
+  hasPhoto     Boolean  @default(false)
+  photoUrl     String?
+  durationMins Int?
   // JSON string array e.g. ["maths", "outdoor"]
   tags      String   @default("[]")
   entryDate DateTime

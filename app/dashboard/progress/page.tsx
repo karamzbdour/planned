@@ -14,6 +14,12 @@ import {
   Clock,
   ChevronRight,
   ExternalLink,
+  Camera,
+  Sparkles,
+  MapPin,
+  Palette,
+  Star,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,14 +38,19 @@ interface SubjectRow {
 
 interface ActivityItem {
   id: string;
-  type: "LESSON" | "EXTERNAL";
+  type: "LESSON" | "EXTERNAL" | "JOURNAL";
   subject: string;
   title: string;
+  notes?: string;
+  moment?: string;
+  hasPhoto?: boolean;
+  photoUrl?: string | null;
   completedAt: string | null;
   objectivesDone: number;
   objectivesTotal: number;
   durationMins: number;
   isExternal: boolean;
+  isJournal?: boolean;
 }
 
 interface ProgressData {
@@ -347,9 +358,43 @@ export default function ProgressPage() {
                       <p className="text-sm font-medium text-brand-green-deep truncate">
                         {item.title}
                       </p>
-                      {item.isExternal && (
+                      {item.isJournal ? (
+                        <Link
+                          href="/dashboard/journal"
+                          className={cn(
+                            "text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1 hover:opacity-80 transition-opacity",
+                            item.moment === "DAY_OUT"
+                              ? "bg-green-100 text-green-700"
+                              : item.moment === "BREAKTHROUGH"
+                              ? "bg-amber-100 text-amber-700"
+                              : item.moment === "CREATIVE"
+                              ? "bg-pink-100 text-pink-700"
+                              : item.moment === "SPECIAL"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-emerald-50 text-brand-green-deep"
+                          )}
+                        >
+                          {item.moment === "DAY_OUT" ? (
+                            <MapPin className="w-2.5 h-2.5" />
+                          ) : item.moment === "BREAKTHROUGH" ? (
+                            <Sparkles className="w-2.5 h-2.5" />
+                          ) : item.moment === "CREATIVE" ? (
+                            <Palette className="w-2.5 h-2.5" />
+                          ) : item.moment === "SPECIAL" ? (
+                            <Star className="w-2.5 h-2.5" />
+                          ) : (
+                            <BookOpen className="w-2.5 h-2.5" />
+                          )}
+                          {item.moment === "DAY_OUT" ? "Day Out" : "Journal"}
+                        </Link>
+                      ) : item.isExternal ? (
                         <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-0.5">
                           <ExternalLink className="w-2.5 h-2.5" /> External
+                        </span>
+                      ) : null}
+                      {item.hasPhoto && (
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-0.5">
+                          <Camera className="w-2.5 h-2.5" /> Photo
                         </span>
                       )}
                     </div>

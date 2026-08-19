@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useActiveChild } from "@/contexts/active-child";
+import { useSetBreadcrumbTitle } from "@/contexts/breadcrumbs";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { CircularProgress } from "@/components/progress/circular-progress";
 import { MasteryModal } from "@/components/progress/mastery-modal";
 import { MasteryTier } from "@/lib/mastery";
@@ -24,6 +26,12 @@ import {
   Sliders,
   TrendingUp,
   Award,
+  BookOpen,
+  Camera,
+  MapPin,
+  Palette,
+  Star,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +62,18 @@ interface ExternalActivity {
   activityDate: string;
 }
 
+interface SubjectJournalEntry {
+  id: string;
+  title: string;
+  notes: string;
+  moment: string;
+  hasPhoto: boolean;
+  photoUrl: string | null;
+  durationMins: number;
+  tags: string[];
+  entryDate: string;
+}
+
 interface SubjectData {
   subject: string;
   child: { id: string; name: string; yearGroup: string | null };
@@ -81,6 +101,7 @@ interface SubjectData {
   };
   objectives: ObjectiveItem[];
   externalActivities: ExternalActivity[];
+  journalEntries?: SubjectJournalEntry[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -328,6 +349,7 @@ export default function SubjectProgressPage() {
   const params = useParams();
   const subject = decodeURIComponent(params.subject as string);
   const { activeChild } = useActiveChild();
+  useSetBreadcrumbTitle(subject);
   const [data, setData] = useState<SubjectData | null>(null);
   const [loading, setLoading] = useState(false);
   const [animate, setAnimate] = useState(false);
@@ -360,7 +382,7 @@ export default function SubjectProgressPage() {
     );
   }
 
-  const { progress, abilityLevel, lessons, objectives, externalActivities } = data;
+  const { progress, abilityLevel, lessons, objectives, externalActivities, journalEntries = [] } = data;
   const pct =
     progress.topicsTotal > 0
       ? Math.round((progress.topicsCompleted / progress.topicsTotal) * 100)
@@ -374,11 +396,15 @@ export default function SubjectProgressPage() {
 
   return (
     <div className="px-4 sm:px-6 py-6 max-w-5xl mx-auto space-y-5">
+      {/* Breadcrumbs trail */}
+      <Breadcrumbs className="-mb-2" />
+
       {/* Back + header */}
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/progress"
           className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors shrink-0"
+          title="Back to progress"
         >
           <ArrowLeft className="w-4 h-4 text-muted-foreground" />
         </Link>
@@ -646,6 +672,114 @@ export default function SubjectProgressPage() {
               </div>
             </div>
           )}
+
+          {/* Learning Journal & Real-World Evidence */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display font-semibold text-brand-green-deep flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-brand-green" />
+                <span>Learning Journal & Evidence</span>
+              </h2>
+              <Link
+                href="/dashboard/journal"
+                className="text-xs text-brand-green font-medium hover:underline inline-flex items-center gap-1"
+              >
+                <span>View all</span>
+                <ChevronRight className="w-3 h-3" />
+              </Link>
+            </div>
+
+            {journalEntries.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-[hsl(var(--border))] divide-y divide-[hsl(var(--border))]">
+                {journalEntries.map((j) => (
+                  <div key={j.id} className="flex items-start gap-3.5 px-4 py-3.5">
+                    {j.photoUrl ? (
+                      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 border border-black/5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={j.photoUrl} alt={j.title} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-9 h-9 rounded-xl bg-brand-mint/50 flex items-center justify-center shrink-0 text-brand-green-deep">
+                        {j.moment === "DAY_OUT" ? (
+                          <MapPin className="w-4 h-4 text-green-600" />
+                        ) : j.moment === "BREAKTHROUGH" ? (
+                          <Sparkles className="w-4 h-4 text-amber-500" />
+                        ) : j.moment === "CREATIVE" ? (
+                          <Palette className="w-4 h-4 text-pink-500" />
+                        ) : j.moment === "SPECIAL" ? (
+                          <Star className="w-4 h-4 text-purple-500" />
+                        ) : (
+                          <BookOpen className="w-4 h-4 text-brand-green" />
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-brand-green-deep truncate">
+                          {j.title}
+                        </p>
+                        <span
+                          className={cn(
+                            "text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0",
+                            j.moment === "DAY_OUT"
+                              ? "bg-green-100 text-green-700"
+                              : j.moment === "BREAKTHROUGH"
+                              ? "bg-amber-100 text-amber-700"
+                              : j.moment === "CREATIVE"
+                              ? "bg-pink-100 text-pink-700"
+                              : j.moment === "SPECIAL"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-slate-100 text-slate-600"
+                          )}
+                        >
+                          {j.moment === "DAY_OUT"
+                            ? "Day out"
+                            : j.moment === "BREAKTHROUGH"
+                            ? "Breakthrough!"
+                            : j.moment === "CREATIVE"
+                            ? "Creative"
+                            : j.moment === "SPECIAL"
+                            ? "Special"
+                            : "Reflection"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                        {j.notes}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatDate(j.entryDate)}
+                        </span>
+                        {j.durationMins > 0 && (
+                          <span className="text-[11px] font-medium text-brand-green bg-brand-mint/40 px-1.5 py-0.5 rounded-md">
+                            {j.durationMins} min logged
+                          </span>
+                        )}
+                        {j.tags.map((t) => (
+                          <span key={t} className="text-[10px] text-muted-foreground">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-dashed border-[hsl(var(--border))] px-4 py-5 text-center">
+                <p className="text-xs text-muted-foreground">
+                  No real-world journal entries logged for {subject} yet.
+                </p>
+                <Link
+                  href="/dashboard/journal"
+                  className="inline-flex items-center gap-1 text-xs text-brand-green font-medium hover:underline mt-1.5"
+                >
+                  <Plus className="w-3 h-3" /> Add journal evidence
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column: Sticky Parent Guidance Hint */}

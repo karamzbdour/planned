@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useActiveChild } from "@/contexts/active-child";
+import { useSetBreadcrumbTitle } from "@/contexts/breadcrumbs";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { useSession } from "next-auth/react";
 import { Loader2, Printer } from "lucide-react";
 import Link from "next/link";
@@ -19,6 +21,7 @@ interface JournalEntry {
   moment: string;
   hasPhoto: boolean;
   photoUrl: string | null;
+  durationMins?: number | null;
   tags: string[];
   entryDate: string;
 }
@@ -116,7 +119,7 @@ function PDFCard({ entry }: { entry: JournalEntry }) {
       <div className="px-4 py-3 space-y-2">
         {/* Meta row */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {entry.subject && (
               <span
                 className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
@@ -126,6 +129,11 @@ function PDFCard({ entry }: { entry: JournalEntry }) {
               </span>
             )}
             <span className="text-[10px] text-gray-500">{label}</span>
+            {entry.durationMins && entry.durationMins > 0 ? (
+              <span className="text-[10px] text-emerald-700 bg-emerald-50 font-medium px-1.5 py-0.2 rounded">
+                {entry.durationMins}m
+              </span>
+            ) : null}
           </div>
           <span className="text-[10px] text-gray-400">{date}</span>
         </div>
@@ -169,6 +177,7 @@ function PDFCard({ entry }: { entry: JournalEntry }) {
 export default function JournalPDFPage() {
   const { activeChild } = useActiveChild();
   const { data: session } = useSession();
+  useSetBreadcrumbTitle("PDF Keepsake");
   const [data, setData]       = useState<JournalData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -233,23 +242,19 @@ export default function JournalPDFPage() {
 
       {/* Screen navigation — hidden in print */}
       <div className="no-print px-5 py-4 flex items-center justify-between gap-3 border-b border-[hsl(var(--border))] bg-white sticky top-0 z-10">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <Link
             href="/dashboard/journal"
-            className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
+            className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors shrink-0"
+            title="Back to journal"
           >
             <ArrowLeft className="w-4 h-4 text-muted-foreground" />
           </Link>
-          <div>
-            <h1 className="font-display font-bold text-brand-green-deep text-sm">
-              PDF keepsake
-            </h1>
-            <p className="text-xs text-muted-foreground">{sorted.length} entries</p>
-          </div>
+          <Breadcrumbs className="py-0 flex-1 min-w-0" />
         </div>
         <button
           onClick={() => window.print()}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2 rounded-xl transition-colors"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2 rounded-xl transition-colors shrink-0"
         >
           <Printer className="w-4 h-4" />
           Print / Save PDF

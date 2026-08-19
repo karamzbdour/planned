@@ -125,3 +125,86 @@ Keep the language warm, encouraging, and appropriate for home education. Activit
 
   return JSON.parse(jsonMatch[0]);
 }
+
+// ─── Journal AI Auto-Analysis Helper ──────────────────────────────────────────
+
+export interface JournalAnalysisParams {
+  notes: string;
+  childName?: string;
+  yearGroup?: string;
+  currentSubject?: string;
+}
+
+export interface JournalAnalysisResult {
+  suggestedTitle: string;
+  suggestedSubject: string;
+  suggestedMoment: "REGULAR" | "BREAKTHROUGH" | "DAY_OUT" | "CREATIVE" | "SPECIAL";
+  suggestedTags: string[];
+  keySkills: string[];
+  estimatedDurationMins?: number;
+  learningSummary: string;
+}
+
+export async function analyzeJournalEntry(
+  params: JournalAnalysisParams
+): Promise<JournalAnalysisResult> {
+  const { notes, childName, yearGroup, currentSubject } = params;
+
+  const prompt = `You are an expert UK homeschool learning analyst.
+Analyze the following parent's journal notes/reflections about a child's learning activity:
+
+Child: ${childName || "Student"}
+${yearGroup ? `Year Group: ${yearGroup} (UK curriculum)` : ""}
+${currentSubject ? `Current Subject context: ${currentSubject}` : ""}
+Notes / Learning description:
+"""
+${notes}
+"""
+
+Available subjects to match against (pick the single most relevant):
+- Maths
+- English
+- Science
+- Art
+- Geography
+- History
+- Music
+- Computing
+- Islamic Studies
+- PE
+- Day out
+- Other
+
+Available moments (pick the most fitting):
+- REGULAR (regular hands-on or textbook learning)
+- BREAKTHROUGH (eureka moment, mastered a tricky concept)
+- DAY_OUT (field trip, museum, nature walk, excursion)
+- CREATIVE (art, building, drama, crafting, storytelling)
+- SPECIAL (celebration, memorable milestone, community)
+
+Please respond in valid JSON format only with the following structure:
+{
+  "suggestedTitle": "A concise, engaging title for this activity (max 6 words)",
+  "suggestedSubject": "One of the available subjects above",
+  "suggestedMoment": "One of REGULAR | BREAKTHROUGH | DAY_OUT | CREATIVE | SPECIAL",
+  "suggestedTags": ["tag1", "tag2", "tag3"],
+  "keySkills": ["Specific skill or curriculum objective observed (1-3 items)"],
+  "estimatedDurationMins": 30,
+  "learningSummary": "A concise 1-2 sentence affirming summary of what the child achieved."
+}`;
+
+  const message = await ai.messages.create({
+    model: MODEL,
+    max_tokens: 1024,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const content = message.content[0];
+  if (content.type !== "text") throw new Error("Unexpected response type");
+
+  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No JSON found in response");
+
+  return JSON.parse(jsonMatch[0]);
+}
+
