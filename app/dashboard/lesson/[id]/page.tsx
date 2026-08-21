@@ -37,6 +37,7 @@ import {
 } from "@/components/lesson/lesson-completion-modal";
 import { useLessonTimer, formatLessonTime } from "@/hooks/use-lesson-timer";
 import { cn } from "@/lib/utils";
+import { YouTubeEmbedCard } from "@/components/lesson/youtube-embed-card";
 import { useSetBreadcrumbTitle } from "@/contexts/breadcrumbs";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import type { FullLessonContent, ActivityType } from "@/lib/lessonGenerator";
@@ -787,28 +788,9 @@ export default function LessonDetailPage() {
       {/* Video resources */}
       {content.videoResources?.length > 0 && (
         <Section icon={<Youtube className="w-4 h-4" />} title="Video Resources">
-          <div className="space-y-2.5">
+          <div className="space-y-4">
             {content.videoResources.map((v, i) => (
-              <a
-                key={i}
-                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(v.searchQuery)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 hover:bg-brand-mint/40 border border-transparent hover:border-brand-green/20 transition-all group"
-              >
-                <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
-                  <Youtube className="w-4 h-4 text-red-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-brand-green-deep truncate">
-                    {v.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    Search: {v.searchQuery}
-                  </p>
-                </div>
-                <ExternalLink className="w-4 h-4 text-muted-foreground group-hover:text-brand-green shrink-0 transition-colors" />
-              </a>
+              <YouTubeEmbedCard key={i} video={v} />
             ))}
           </div>
         </Section>

@@ -1,6 +1,7 @@
 import { ai, MODEL } from "@/lib/ai";
 import { db } from "@/lib/db";
 import { fetchQuranVerse } from "@/lib/quranApi";
+import { enrichVideoResources } from "@/lib/youtube";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,8 @@ export interface Activity {
 export interface VideoResource {
   title: string;
   searchQuery: string;
+  youtubeId?: string;
+  url?: string;
 }
 
 export interface FaithConnection {
@@ -43,6 +46,22 @@ export interface QuizQuestion {
   correctIndex: number;
 }
 
+export interface ChildStep {
+  step: number;
+  title: string;
+  instructions: string;
+  tip?: string;
+}
+
+export interface ChildContent {
+  welcomeMessage: string;
+  storyHook: string;
+  childObjectives: string[];
+  funFacts: string[];
+  childSteps: ChildStep[];
+  challengeQuestion?: string;
+}
+
 export interface FullLessonContent {
   title: string;
   description: string;
@@ -53,6 +72,7 @@ export interface FullLessonContent {
   faithConnection?: FaithConnection;
   dayOut?: DayOut;
   quiz: QuizQuestion[];
+  childContent?: ChildContent;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -297,7 +317,47 @@ Return ONLY valid JSON — no markdown, no code fences, just the raw JSON object
       "title": "Second video title",
       "searchQuery": "second YouTube search query"
     }
-  ],${faithBlock}${
+  ],
+  "childContent": {
+    "welcomeMessage": "Warm, energetic greeting addressing ${child.name} directly, connecting to their interests (${interests}) and setting up today's discovery (2 sentences).",
+    "storyHook": "Engaging, child-friendly story or curious exploration hook introducing ${topic} in vivid, accessible terms matching their age (3-4 sentences).",
+    "childObjectives": [
+      "Fun mission goal 1 framed as an exciting milestone",
+      "Fun mission goal 2",
+      "Fun mission goal 3"
+    ],
+    "funFacts": [
+      "Mind-blowing, cool fun fact related to ${topic}",
+      "Second fascinating fact"
+    ],
+    "childSteps": [
+      {
+        "step": 1,
+        "title": "Action step title",
+        "instructions": "Direct, child-facing instructions telling ${child.name} what to do, observe, or create. 2-3 sentences.",
+        "tip": "Helpful secret tip or hint for ${child.name}"
+      },
+      {
+        "step": 2,
+        "title": "Action step title",
+        "instructions": "Direct instructions for step 2. 2-3 sentences.",
+        "tip": "Helpful secret tip or hint"
+      },
+      {
+        "step": 3,
+        "title": "Action step title",
+        "instructions": "Direct instructions for step 3. 2-3 sentences.",
+        "tip": "Helpful secret tip or hint"
+      },
+      {
+        "step": 4,
+        "title": "Action step title",
+        "instructions": "Direct instructions for step 4. 2-3 sentences.",
+        "tip": "Helpful secret tip or hint"
+      }
+    ],
+    "challengeQuestion": "A fun brain-teaser, riddle, or 'think about it' bonus challenge for ${child.name}."
+  },${faithBlock}${
     includeDayOut
       ? `
   "dayOut": {
@@ -328,7 +388,8 @@ Rules:
 - Activity type MUST be exactly one of: Drawing, Worksheet, Hands-on, Discussion
 - correctIndex is 0-based (0 = first option)
 - All content must be age-appropriate for ${child.yearGroup ?? "primary school"}
-- Teaching instructions should feel warm, encouraging, and practical for a home setting
+- Teaching instructions in teachingGuide should feel warm, encouraging, and practical for a parent in a home setting
+- childContent MUST be written in the second person directly to ${child.name} ("you"), with enthusiasm, wonder, and age-appropriate language matching their year group (${child.yearGroup ?? "primary"}) and interests (${interests}).
 - Connect to ${child.name}'s interests (${interests}) where natural
 - Follow the CURRICULUM APPROACH section above — do not default to a BNC-style lesson if the curriculum is Montessori or Unschooling`;
 
@@ -388,6 +449,15 @@ Rules:
         `[lessonGenerator] Dropping unverified faithConnection for "${parsed.faithConnection.reference}"`,
       );
       delete parsed.faithConnection;
+    }
+  }
+
+  // ── Enrich YouTube video resources with verified video IDs ─────────────────
+  if (parsed.videoResources?.length) {
+    try {
+      parsed.videoResources = await enrichVideoResources(parsed.videoResources);
+    } catch (e) {
+      console.warn("[lessonGenerator] Failed to enrich video resources:", e);
     }
   }
 
