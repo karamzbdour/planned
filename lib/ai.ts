@@ -30,7 +30,7 @@ function getClient(): GoogleGenerativeAI {
 // are frequently overloaded (503 "high demand") for free-tier projects, and
 // Pro requires billing to be enabled at all. Override via GEMINI_MODEL once
 // billing is on.
-export const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
+export const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
 
 interface CreateParams {
   model: string;
