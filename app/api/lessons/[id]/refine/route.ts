@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { generateLesson, type RefineIntent } from "@/lib/lessonGenerator";
+import { streamText, Output, toTextStream, createTextStreamResponse } from "ai";
+import { geminiModel } from "@/lib/ai/model";
+import { fullLessonSchema } from "@/lib/ai/schemas";
+import {
+  buildLessonPrompt,
+  postProcessLessonContent,
+  type RefineIntent,
+} from "@/lib/lessonGenerator";
 import { getUserTier } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
 
@@ -10,25 +17,23 @@ export const dynamic = "force-dynamic";
 
 const VALID_INTENTS: RefineIntent[] = ["easier", "harder", "alternative"];
 
-// Re-uses the same per-tier hourly cap as the original detail generation —
-// refines are full AI calls and we don't want to make abuse cheaper.
 const REFINE_LIMITS = {
   FREE:    { limit: 5,  windowMs: 60 * 60 * 1000 },
   BASIC:   { limit: 30, windowMs: 60 * 60 * 1000 },
   PREMIUM: { limit: 90, windowMs: 60 * 60 * 1000 },
 } as const;
 
-/**
- * POST /api/lessons/[id]/refine
- * Body: { intent: "easier" | "harder" | "alternative" }
- *
- * Re-generates the lesson detail with an adjusted prompt (easier wording,
- * harder stretch, or a different angle) and persists the new content,
- * replacing whatever was cached. Also resets the lesson's objectives.
- */
+function safeParseJson<T>(str: string, fallback: T): T {
+  try {
+    return JSON.parse(str) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: { id: string } }
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -42,67 +47,114 @@ export async function POST(
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
   if (!VALID_INTENTS.includes(intent)) {
     return NextResponse.json(
       { error: `intent must be one of: ${VALID_INTENTS.join(", ")}` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
   const lesson = await db.lesson.findFirst({
     where: { id: params.id, child: { userId: session.user.id } },
+    include: {
+      child: {
+        include: {
+          user: {
+            select: {
+              location: true,
+              familyProfile: true,
+            },
+          },
+        },
+      },
+    },
   });
+
   if (!lesson) {
     return NextResponse.json({ error: "Lesson not found" }, { status: 404 });
   }
 
   const tier = await getUserTier(session.user.id);
-
-  // Reuse the AI rate limit budget — separate bucket from generate-detail
-  // so a rapid refine streak alone can hit the cap, but uses the same
-  // generous per-tier hourly numbers.
   const { limit, windowMs } = REFINE_LIMITS[tier];
   const rl = rateLimit(`refine:${session.user.id}`, limit, windowMs);
   if (!rl.ok) {
     return NextResponse.json(
       { error: `Too many refines. Try again in ${rl.retryAfterSeconds}s.` },
-      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
     );
   }
 
-  let content;
-  try {
-    content = await generateLesson(lesson.childId, lesson.subject, lesson.topic, tier, intent);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "AI generation failed";
-    console.error("[refine]", msg);
-    return NextResponse.json({ error: msg }, { status: 502 });
-  }
+  const child = lesson.child;
+  const fp = child.user.familyProfile;
+  const interests =
+    safeParseJson<string[]>(child.interests, []).join(", ") ||
+    "a variety of topics";
+  const curriculum = fp?.curriculum ?? "BNC";
+  const faith = fp?.faith ?? "SECULAR";
+  const faithIntegration = fp?.faithIntegration ?? false;
+  const location = child.user.location ?? "United Kingdom";
 
-  // Persist the new content and reset objectives — old objectives no longer
-  // match the new teachingGuide, and keeping their completed state would be
-  // misleading.
-  await db.$transaction([
-    db.lesson.update({
-      where: { id: lesson.id },
-      data: { generatedContent: JSON.stringify(content) },
+  const { prompt, includeFaith } = buildLessonPrompt({
+    childName: child.name,
+    childAge: child.age,
+    childYearGroup: child.yearGroup,
+    learningStyle: child.learningStyle,
+    interests,
+    literacyLevel: child.literacyLevel,
+    numeracyLevel: child.numeracyLevel,
+    reasoningLevel: child.reasoningLevel,
+    curriculum,
+    faith,
+    faithIntegration,
+    location,
+    subject: lesson.subject,
+    topic: lesson.topic,
+    tier,
+    refineIntent: intent,
+  });
+
+  const result = streamText({
+    model: geminiModel,
+    output: Output.object({
+      schema: fullLessonSchema,
     }),
-    db.lessonObjective.deleteMany({ where: { lessonId: lesson.id } }),
-  ]);
+    prompt,
+    onEnd: async () => {
+      try {
+        const object = await result.output;
+        if (object) {
+          const processed = await postProcessLessonContent(
+            object,
+            includeFaith,
+            faith
+          );
 
-  const objectives = await db.$transaction(
-    (content.objectives ?? []).map((text) =>
-      db.lessonObjective.create({ data: { lessonId: lesson.id, text } }),
-    ),
-  );
+          await db.$transaction([
+            db.lesson.update({
+              where: { id: lesson.id },
+              data: { generatedContent: JSON.stringify(processed) },
+            }),
+            db.lessonObjective.deleteMany({ where: { lessonId: lesson.id } }),
+          ]);
 
-  return NextResponse.json({
-    content,
-    objectives: objectives.map((o) => ({
-      id: o.id,
-      text: o.text,
-      completed: o.completed,
-      completedAt: o.completedAt?.toISOString() ?? null,
-    })),
+          if (processed.objectives?.length) {
+            await db.$transaction(
+              processed.objectives.map((text) =>
+                db.lessonObjective.create({
+                  data: { lessonId: lesson.id, text },
+                })
+              )
+            );
+          }
+        }
+      } catch (err) {
+        console.error("[refine onEnd error]:", err);
+      }
+    },
+  });
+
+  return createTextStreamResponse({
+    stream: toTextStream({ stream: result.stream }),
   });
 }

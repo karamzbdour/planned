@@ -2,14 +2,13 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ai, MODEL } from "@/lib/ai";
+import { streamText, Output, toTextStream, createTextStreamResponse } from "ai";
+import { geminiModel } from "@/lib/ai/model";
+import { weekGenerationSchema } from "@/lib/ai/schemas";
 import { getUserTier, freeWeekLimitReached, PAYWALL_RESPONSES } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
 
-// Per-tier hourly limits for week generation. Each call burns an AI
-// request, so caps protect spend and bound spam abuse. Generous enough that
-// transient upstream errors (e.g. 503s from Gemini) leave the user some
-// headroom to retry.
+// Per-tier hourly limits for week generation.
 const WEEK_GEN_LIMITS = {
   FREE:    { limit: 10, windowMs: 60 * 60 * 1000 },
   BASIC:   { limit: 30, windowMs: 60 * 60 * 1000 },
@@ -45,10 +44,6 @@ const CURRICULUM_LABELS: Record<string, string> = {
   UNSCHOOLING: "Unschooling / Child-led",
 };
 
-/**
- * Returns the curriculum-specific section of the prompt — the part that tells
- * Claude how to structure the week and what kind of lessons to produce.
- */
 function buildCurriculumPrompt(
   curriculum: string,
   yearGroup: string | null,
@@ -130,6 +125,11 @@ That gives 4–5 lessons per day (20–25 total).
 ${faithLine}`;
 }
 
+function safeParseJson(str: string, fallback: unknown) {
+  try { return JSON.parse(str); }
+  catch { return fallback; }
+}
+
 // ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
@@ -189,7 +189,7 @@ export async function POST(req: Request) {
   );
 
   // ── Build the prompt ──────────────────────────────────────────────────────
-  const prompt = `You are an expert UK homeschool curriculum planner. Generate a personalised week of lessons (Monday to Friday) for this child:
+  const prompt = `You are an expert UK homeschool curriculum planner. Generate a personalised week of lessons (Monday to Friday, dayOffset 0 to 4) for this child:
 
 Name: ${child.name}
 Age: ${child.age ?? "unknown"}
@@ -198,133 +198,66 @@ Learning style: ${child.learningStyle ?? "balanced"}
 Curriculum: ${curriculumLabel}
 ${curriculumSection}
 
-Return ONLY valid JSON — no markdown, no code fences, just the raw JSON object:
-{
-  "lessons": [
-    {
-      "dayOffset": 0,
-      "subject": "Subject name",
-      "topic": "Short specific topic (3-6 words)",
-      "durationMins": 45,
-      "title": "Engaging lesson title",
-      "description": "2-3 sentences describing the activity in an engaging, warm way for a homeschool parent to read. Make it specific to this child's interests and year group.",
-      "objectives": ["Objective 1", "Objective 2", "Objective 3"]
-    }
-  ]
-}
-
-dayOffset: 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday
-
-Important rules:
+Important guidelines:
 - Follow the curriculum approach described above — do NOT use a BNC timetable for Montessori or Unschooling.
 - Make objectives measurable and age-appropriate for ${child.yearGroup ?? "primary age"}.
 - Descriptions should be warm, specific, and refer to ${child.name} by name.
 - Connect to interests (${interests}) wherever natural.`;
 
-  // ── Call Claude ───────────────────────────────────────────────────────────
-  let message;
-  try {
-    message = await ai.messages.create({
-      model: MODEL,
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Anthropic API error";
-    console.error("[generate-week] Anthropic error:", msg);
-    return NextResponse.json(
-      { error: "AI generation failed. Please try again in a moment.", detail: msg },
-      { status: 502 },
-    );
-  }
+  // ── Stream structured response via Vercel AI SDK ──────────────────────────
+  const result = streamText({
+    model: geminiModel,
+    output: Output.object({
+      schema: weekGenerationSchema,
+    }),
+    prompt,
+    onEnd: async () => {
+      try {
+        const object = await result.output;
+        if (object?.lessons && Array.isArray(object.lessons) && object.lessons.length > 0) {
+          const monday     = getMondayOfWeek(new Date());
+          const weekNumber = getISOWeek(monday);
+          const weekEnd    = new Date(monday);
+          weekEnd.setDate(monday.getDate() + 7);
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
+          // Remove any existing lessons for this week to avoid duplicates
+          await db.lesson.deleteMany({
+            where: { childId, dayDate: { gte: monday, lt: weekEnd } },
+          });
 
-  // Strip markdown fences if Claude added them
-  const stripped = text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
+          await db.$transaction(
+            object.lessons.map((lesson) => {
+              const lessonDate = new Date(monday);
+              lessonDate.setDate(monday.getDate() + Math.min(Math.max(lesson.dayOffset ?? 0, 0), 4));
+              lessonDate.setHours(9, 0, 0, 0);
 
-  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error("[generate-week] No JSON in response:", text.slice(0, 300));
-    return NextResponse.json(
-      { error: "AI returned an unexpected response. Please try again." },
-      { status: 500 },
-    );
-  }
-
-  let parsed: {
-    lessons: {
-      dayOffset: number;
-      subject: string;
-      topic: string;
-      durationMins: number;
-      title: string;
-      description: string;
-      objectives: string[];
-    }[];
-  };
-
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    return NextResponse.json(
-      { error: "AI response could not be parsed. Please try again." },
-      { status: 500 },
-    );
-  }
-
-  if (!Array.isArray(parsed.lessons) || parsed.lessons.length === 0) {
-    return NextResponse.json(
-      { error: "AI returned an empty lesson plan. Please try again." },
-      { status: 500 },
-    );
-  }
-
-  // ── Persist to database ───────────────────────────────────────────────────
-  const monday     = getMondayOfWeek(new Date());
-  const weekNumber = getISOWeek(monday);
-  const weekEnd    = new Date(monday);
-  weekEnd.setDate(monday.getDate() + 7);
-
-  // Remove any existing lessons for this week to avoid duplicates
-  await db.lesson.deleteMany({
-    where: { childId, dayDate: { gte: monday, lt: weekEnd } },
+              return db.lesson.create({
+                data: {
+                  childId,
+                  subject:    lesson.subject,
+                  topic:      lesson.topic,
+                  dayDate:    lessonDate,
+                  weekNumber,
+                  termNumber: 1,
+                  durationMins: lesson.durationMins ?? 45,
+                  status: "PENDING",
+                  generatedContent: JSON.stringify({
+                    title:       lesson.title,
+                    description: lesson.description,
+                    objectives:  lesson.objectives ?? [],
+                  }),
+                },
+              });
+            }),
+          );
+        }
+      } catch (e) {
+        console.error("[generate-week] Error saving generated lessons:", e);
+      }
+    },
   });
 
-  const created = await db.$transaction(
-    parsed.lessons.map((lesson) => {
-      const lessonDate = new Date(monday);
-      lessonDate.setDate(monday.getDate() + Math.min(Math.max(lesson.dayOffset, 0), 4));
-      lessonDate.setHours(9, 0, 0, 0);
-
-      return db.lesson.create({
-        data: {
-          childId,
-          subject:    lesson.subject,
-          topic:      lesson.topic,
-          dayDate:    lessonDate,
-          weekNumber,
-          termNumber: 1,
-          durationMins: lesson.durationMins ?? 45,
-          status: "PENDING",
-          generatedContent: JSON.stringify({
-            title:       lesson.title,
-            description: lesson.description,
-            objectives:  lesson.objectives ?? [],
-          }),
-        },
-      });
-    }),
-  );
-
-  return NextResponse.json({ count: created.length, curriculum });
-}
-
-function safeParseJson(str: string, fallback: unknown) {
-  try { return JSON.parse(str); }
-  catch { return fallback; }
+  return createTextStreamResponse({
+    stream: toTextStream({ stream: result.stream }),
+  });
 }

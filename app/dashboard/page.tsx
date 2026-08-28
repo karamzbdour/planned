@@ -162,27 +162,10 @@ export default function DashboardPage() {
     fetchData(activeChild.id, range, customDate);
   }, [activeChild?.id, range, customDate, fetchData]);
 
-  async function handleGenerate() {
+  function handleGenerate() {
     if (!activeChild?.id || generating) return;
     setGenerating(true);
     setGenerateError("");
-    try {
-      const res = await fetch("/api/lessons/generate-week", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ childId: activeChild.id }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Generation failed");
-      }
-      // Refetch dashboard so the new lessons show up.
-      await fetchData(activeChild.id, range, customDate);
-    } catch (err: unknown) {
-      setGenerateError(err instanceof Error ? err.message : "Couldn't generate.");
-    } finally {
-      setGenerating(false);
-    }
   }
 
   // No children at all
@@ -242,17 +225,32 @@ export default function DashboardPage() {
     );
   }
 
-  // No lessons yet — trigger generation
-  if (!data.hasAnyLessons) {
+  // No lessons yet or active generation triggered — stream generation canvas
+  if (!data.hasAnyLessons || generating) {
     return (
-      <div className="px-4 sm:px-6 py-6 sm:py-8 max-w-xl mx-auto">
+      <div className="px-4 sm:px-6 py-6 sm:py-8 max-w-xl mx-auto space-y-4">
+        {generating && data.hasAnyLessons && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setGenerating(false)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Cancel & back to dashboard
+            </Button>
+          </div>
+        )}
         <GenerateLessons
           childId={activeChild.id}
           childName={activeChild.name}
           faith={data.familyProfile?.faith}
           faithIntegration={data.familyProfile?.faithIntegration}
           location={data.familyProfile?.location ?? undefined}
-          onGenerated={() => fetchData(activeChild.id, range, customDate)}
+          onGenerated={() => {
+            setGenerating(false);
+            fetchData(activeChild.id, range, customDate);
+          }}
         />
       </div>
     );
@@ -288,7 +286,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="font-display text-lg sm:text-xl font-bold text-brand-green-deep leading-tight">
-              {greeting()}, {child.name}&apos;s day
+              {greeting()}, {child.name}&apos;s parent
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               {data.stats.totalLessonsToday} lesson

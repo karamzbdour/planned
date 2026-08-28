@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Clock,
   MapPin,
   Play,
@@ -12,11 +11,9 @@ import {
   Sparkles,
   BookOpen,
   Youtube,
-  ExternalLink,
   Loader2,
   AlertCircle,
   Lightbulb,
-  CheckSquare,
   CheckCircle,
   Target,
   Printer,
@@ -25,6 +22,8 @@ import {
   Shuffle,
   X,
 } from "lucide-react";
+import { useObject } from "@ai-sdk/react";
+import { fullLessonSchema } from "@/lib/ai/schemas";
 import { AddEntryModal } from "@/components/journal/add-entry-modal";
 import { ObjectiveList } from "@/components/lesson/objective-list";
 import { QuizSection } from "@/components/lesson/quiz-section";
@@ -40,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { YouTubeEmbedCard } from "@/components/lesson/youtube-embed-card";
 import { useSetBreadcrumbTitle } from "@/contexts/breadcrumbs";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import type { FullLessonContent, ActivityType } from "@/lib/lessonGenerator";
+import type { FullLessonContent, ActivityType, TeachingStep, Activity, QuizQuestion, VideoResource } from "@/lib/lessonGenerator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -125,32 +124,40 @@ function subjectDot(subject: string) {
   return SUBJECT_DOT_COLORS[subject.toLowerCase()] ?? "bg-brand-green";
 }
 
-// ─── Section wrapper ──────────────────────────────────────────────────────────
-
 function Section({
   icon,
   title,
   children,
   accent,
+  isStreaming,
 }: {
   icon: React.ReactNode;
   title: string;
   children: React.ReactNode;
   accent?: boolean;
+  isStreaming?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border px-5 py-5",
+        "rounded-2xl border px-5 py-5 transition-all duration-300",
         accent
           ? "bg-brand-mint/40 border-brand-green/25"
-          : "bg-white border-[hsl(var(--border))]"
+          : "bg-white border-[hsl(var(--border))]",
+        isStreaming && "ring-1 ring-brand-green/30"
       )}
     >
-      <h2 className="font-display font-semibold text-brand-green-deep flex items-center gap-2 mb-4">
-        <span className="text-brand-green">{icon}</span>
-        {title}
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-display font-semibold text-brand-green-deep flex items-center gap-2">
+          <span className="text-brand-green">{icon}</span>
+          {title}
+        </h2>
+        {isStreaming && (
+          <span className="text-[10px] text-brand-green bg-brand-mint px-2 py-0.5 rounded-full font-medium animate-pulse">
+            <Loader2 className="w-3 h-3 animate-spin" />
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );
@@ -165,51 +172,158 @@ export default function LessonDetailPage() {
   const [lesson, setLesson] = useState<LessonData | null>(null);
   const [content, setContent] = useState<FullLessonContent | null>(null);
   const [objectives, setObjectives] = useState<Objective[]>([]);
-  useSetBreadcrumbTitle(content?.title ?? lesson?.topic ?? "Lesson");
-  const [phase, setPhase] = useState<"loading" | "generating" | "ready" | "error">("loading");
+  const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
-  // Which refine intent is currently in-flight, if any. Drives the spinner
-  // on individual refine buttons and disables the others so the user can't
-  // queue up overlapping AI calls.
-  const [refining, setRefining] = useState<"easier" | "harder" | "alternative" | null>(null);
-  const [refineError, setRefineError] = useState("");
-  // Banner shown after a successful refine, explaining what changed. Auto
-  // dismisses after a few seconds; user can also close it. Stays present
-  // when the user wanders away from the tab so they don't miss it on return.
   const [refineNotice, setRefineNotice] = useState<{
     intent: "easier" | "harder" | "alternative";
   } | null>(null);
 
-  async function refine(intent: "easier" | "harder" | "alternative") {
-    setRefining(intent);
-    setRefineError("");
-    setRefineNotice(null);
-    try {
-      const res = await fetch(`/api/lessons/${lessonId}/refine`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "Refine failed");
+  useSetBreadcrumbTitle(content?.title ?? lesson?.topic ?? "Lesson");
+
+  // ── Stream Hook for Initial Generation ──────────────────────────────────────
+  const {
+    object: streamedDetail,
+    isLoading: isDetailStreaming,
+    error: detailStreamError,
+    submit: submitDetailStream,
+  } = useObject({
+    api: `/api/lessons/${lessonId}/generate-detail`,
+    schema: fullLessonSchema,
+    onFinish: ({ object }) => {
+      if (object) {
+        setContent(object as FullLessonContent);
+        if (object.objectives) {
+          setObjectives(
+            object.objectives.map((text, i) => ({
+              id: `obj-${i}`,
+              text: text ?? "",
+              completed: false,
+              completedAt: null,
+            }))
+          );
+        }
+        setPhase("ready");
       }
-      const { content: newContent, objectives: newObjectives } = await res.json();
-      setContent(newContent as FullLessonContent);
-      setObjectives(newObjectives ?? []);
-      // Tell the user what just happened — they may have switched tabs
-      // during the 10-15s wait and the silent swap is confusing.
-      setRefineNotice({ intent });
-      // Scroll back to top so the user sees the refreshed teaching guide.
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err: unknown) {
-      setRefineError(err instanceof Error ? err.message : "Couldn't refine — try again.");
-    } finally {
-      setRefining(null);
-    }
+    },
+  });
+
+  // ── Stream Hook for Refinement ──────────────────────────────────────────────
+  const [refiningIntent, setRefiningIntent] = useState<"easier" | "harder" | "alternative" | null>(null);
+  const {
+    object: streamedRefine,
+    isLoading: isRefineStreaming,
+    error: refineStreamError,
+    submit: submitRefineStream,
+  } = useObject({
+    api: `/api/lessons/${lessonId}/refine`,
+    schema: fullLessonSchema,
+    onError: () => {
+      setRefiningIntent(null);
+    },
+    onFinish: ({ object }) => {
+      if (object) {
+        setContent(object as FullLessonContent);
+        if (object.objectives) {
+          setObjectives(
+            object.objectives.map((text, i) => ({
+              id: `obj-${i}`,
+              text: text ?? "",
+              completed: false,
+              completedAt: null,
+            }))
+          );
+        }
+        if (refiningIntent) {
+          setRefineNotice({ intent: refiningIntent });
+        }
+        setRefiningIntent(null);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    },
+  });
+
+  function handleRefine(intent: "easier" | "harder" | "alternative") {
+    if (isCurrentlyStreaming || statusLoading) return;
+    // Clear previous lesson content and objectives from local memory so skeletons render
+    setContent(null);
+    setObjectives([]);
+    setRefiningIntent(intent);
+    setRefineNotice(null);
+    submitRefineStream({ intent });
   }
 
-  // ── Start / Mark complete / timer ────────────────────────────────────────
+  const hasTriggeredGenRef = useRef(false);
+
+  // ── Initial Data Fetch ──────────────────────────────────────────────────────
+  const retry = useCallback(() => {
+    hasTriggeredGenRef.current = false;
+    setPhase("loading");
+    setErrorMsg("");
+    fetch(`/api/lessons/${lessonId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Lesson not found");
+        return res.json();
+      })
+      .then(({ lesson: l, parsedContent }) => {
+        setLesson(l);
+        if (parsedContent?.teachingGuide?.length) {
+          setContent(parsedContent as FullLessonContent);
+          setObjectives(l.objectives ?? []);
+          setPhase("ready");
+        } else {
+          hasTriggeredGenRef.current = true;
+          setPhase("ready");
+          submitDetailStream({});
+        }
+      })
+      .catch((err) => {
+        setPhase("error");
+        setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
+      });
+  }, [lessonId, submitDetailStream]);
+
+  useEffect(() => {
+    let cancelled = false;
+    hasTriggeredGenRef.current = false;
+    setPhase("loading");
+    setErrorMsg("");
+
+    async function initLesson() {
+      try {
+        const res = await fetch(`/api/lessons/${lessonId}`);
+        if (!res.ok) throw new Error("Lesson not found");
+        const { lesson: l, parsedContent } = await res.json();
+        if (cancelled) return;
+        setLesson(l);
+
+        if (parsedContent?.teachingGuide?.length) {
+          setContent(parsedContent as FullLessonContent);
+          setObjectives(l.objectives ?? []);
+          setPhase("ready");
+        } else {
+          if (!hasTriggeredGenRef.current) {
+            hasTriggeredGenRef.current = true;
+            setPhase("ready");
+            submitDetailStream({});
+          }
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setPhase("error");
+          setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
+        }
+      }
+    }
+
+    initLesson();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lessonId]);
+
+  // ── Timer / Start / Complete Controls ──────────────────────────────────────
   const [statusLoading, setStatusLoading] = useState(false);
   const [completionFeedback, setCompletionFeedback] = useState<CompletionFeedbackData | null>(null);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -233,7 +347,6 @@ export default function LessonDetailPage() {
     initialPaused: lesson?.isPaused ?? false,
   });
 
-  // IntersectionObserver to show sticky HUD when scrolled past timer card
   useEffect(() => {
     const el = timerCardRef.current;
     if (!el || lesson?.status !== "IN_PROGRESS") {
@@ -266,7 +379,7 @@ export default function LessonDetailPage() {
                 isPaused: false,
                 startedAt: prev.startedAt ?? new Date().toISOString(),
               }
-            : prev,
+            : prev
         );
       }
     } finally {
@@ -300,7 +413,7 @@ export default function LessonDetailPage() {
                     }
                   : prev.child,
               }
-            : prev,
+            : prev
         );
         setCompletionFeedback(data);
         setShowCompletionModal(true);
@@ -329,49 +442,7 @@ export default function LessonDetailPage() {
     },
   };
 
-  const load = useCallback(async () => {
-    setPhase("loading");
-    try {
-      // 1. Fetch lesson metadata
-      const res = await fetch(`/api/lessons/${lessonId}`);
-      if (!res.ok) throw new Error("Lesson not found");
-      const { lesson: l, parsedContent } = await res.json();
-      setLesson(l);
-
-      // 2. If full content already exists, render immediately
-      if (parsedContent?.teachingGuide?.length) {
-        setContent(parsedContent as FullLessonContent);
-        setObjectives(l.objectives ?? []);
-        setPhase("ready");
-        return;
-      }
-
-      // 3. Otherwise, generate full detail
-      setPhase("generating");
-      const genRes = await fetch(`/api/lessons/${lessonId}/generate-detail`, {
-        method: "POST",
-      });
-      if (!genRes.ok) {
-        const data = await genRes.json().catch(() => ({}));
-        throw new Error(data.error ?? "Generation failed");
-      }
-      const { content: fullContent, objectives: objs } = await genRes.json();
-      setContent(fullContent as FullLessonContent);
-      setObjectives(objs ?? []);
-      setPhase("ready");
-    } catch (err: unknown) {
-      setPhase("error");
-      setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
-    }
-  }, [lessonId]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // ── Loading / generating states ──────────────────────────────────────────
-
-  if (phase === "loading") {
+  if (phase === "loading" && !lesson) {
     return (
       <div className="flex items-center justify-center min-h-[70vh] gap-3">
         <Loader2 className="w-6 h-6 animate-spin text-brand-green" />
@@ -380,29 +451,7 @@ export default function LessonDetailPage() {
     );
   }
 
-  if (phase === "generating") {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-6 gap-4">
-        <div className="relative">
-          <div className="w-20 h-20 rounded-2xl planned-gradient flex items-center justify-center shadow-lg">
-            <Sparkles className="w-10 h-10 text-white" />
-          </div>
-          <div className="absolute inset-0 rounded-2xl border-2 border-brand-green/40 animate-ping" />
-        </div>
-        <div>
-          <h2 className="font-display text-xl font-bold text-brand-green-deep mb-1">
-            Crafting your lesson…
-          </h2>
-          <p className="text-sm text-muted-foreground max-w-xs leading-relaxed">
-            Planned is building a personalised teaching guide, activities,
-            quiz, and day out idea. About 15 seconds.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (phase === "error") {
+  if (phase === "error" || detailStreamError) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-6 gap-4">
         <div className="w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
@@ -412,9 +461,11 @@ export default function LessonDetailPage() {
           <h2 className="font-display text-xl font-bold text-brand-green-deep mb-1">
             Couldn&apos;t load lesson
           </h2>
-          <p className="text-sm text-muted-foreground mb-4">{errorMsg}</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            {errorMsg || detailStreamError?.message || "An error occurred"}
+          </p>
           <button
-            onClick={load}
+            onClick={retry}
             className="bg-brand-green text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-brand-green-deep transition-colors"
           >
             Try again
@@ -424,10 +475,60 @@ export default function LessonDetailPage() {
     );
   }
 
-  if (!lesson || !content) return null;
+  if (!lesson) return null;
+
+  // Active displayed data: either from refined stream, detail stream, or cached content
+  const activeStream = isRefineStreaming
+    ? streamedRefine
+    : isDetailStreaming
+    ? streamedDetail
+    : null;
+
+  const displayTitle =
+    activeStream?.title || (isRefineStreaming ? "" : content?.title) || (isRefineStreaming ? "" : lesson.topic);
+  const displayDescription =
+    activeStream?.description || (isRefineStreaming ? "" : content?.description);
+
+  const rawObjectives =
+    activeStream?.objectives || (isRefineStreaming ? [] : content?.objectives) || [];
+  const displayObjectives: Objective[] =
+    !isRefineStreaming && objectives.length > 0
+      ? objectives
+      : (rawObjectives.filter(Boolean) as string[]).map((text, i) => ({
+          id: `stream-obj-${i}`,
+          text,
+          completed: false,
+          completedAt: null,
+        }));
+
+  const displayTeachingGuide: TeachingStep[] =
+    (activeStream?.teachingGuide?.filter(Boolean) as TeachingStep[]) ||
+    (isRefineStreaming ? [] : content?.teachingGuide) ||
+    [];
+
+  const displayActivities: Activity[] =
+    (activeStream?.activities?.filter(Boolean) as Activity[]) ||
+    (isRefineStreaming ? [] : content?.activities) ||
+    [];
+
+  const displayVideos: VideoResource[] =
+    (activeStream?.videoResources?.filter(Boolean) as VideoResource[]) ||
+    (isRefineStreaming ? [] : content?.videoResources) ||
+    [];
+
+  const displayFaith =
+    activeStream?.faithConnection || (isRefineStreaming ? null : content?.faithConnection);
+
+  const displayDayOut =
+    activeStream?.dayOut || (isRefineStreaming ? null : content?.dayOut);
+
+  const displayQuiz: QuizQuestion[] =
+    (activeStream?.quiz?.filter(Boolean) as QuizQuestion[]) ||
+    (isRefineStreaming ? [] : content?.quiz) ||
+    [];
 
   const { child } = lesson;
-  const hasFaith = !!content.faithConnection;
+  const isCurrentlyStreaming = isDetailStreaming || isRefineStreaming;
 
   return (
     <div className="max-w-2xl mx-auto px-5 py-6 space-y-5 print:max-w-full print:px-0 print:py-0 print:space-y-3">
@@ -444,7 +545,7 @@ export default function LessonDetailPage() {
       </div>
 
       {/* Hero header */}
-      <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-5">
+      <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-5 transition-all">
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span
             className={cn(
@@ -464,15 +565,32 @@ export default function LessonDetailPage() {
               ✓ Completed
             </span>
           )}
+          {isCurrentlyStreaming && (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-green bg-brand-mint px-2.5 py-1 rounded-full animate-pulse">
+              <Sparkles className="w-3 h-3" />
+              {isRefineStreaming ? "Refining lesson live..." : "Generating lesson live..."}
+            </span>
+          )}
         </div>
 
-        <h1 className="font-display text-xl font-bold text-brand-green-deep leading-snug mb-3">
-          {content.title}
-        </h1>
+        {displayTitle ? (
+          <h1 className="font-display text-xl font-bold text-brand-green-deep leading-snug mb-3">
+            {displayTitle}
+          </h1>
+        ) : (
+          <div className="h-7 bg-muted/60 rounded-md animate-pulse w-3/4 mb-3" />
+        )}
 
-        <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-          {content.description}
-        </p>
+        {displayDescription ? (
+          <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+            {displayDescription}
+          </p>
+        ) : (
+          <div className="space-y-1.5 mb-4">
+            <div className="h-4 bg-muted/60 rounded animate-pulse w-full" />
+            <div className="h-4 bg-muted/40 rounded animate-pulse w-3/4" />
+          </div>
+        )}
 
         {/* Meta pills */}
         <div className="flex flex-wrap gap-2">
@@ -494,8 +612,7 @@ export default function LessonDetailPage() {
         </div>
       </div>
 
-      {/* Start / Complete / Timer — print-hidden because it doesn't apply
-          to the printed worksheet flow. */}
+      {/* Start / Complete / Timer */}
       <div
         ref={timerCardRef}
         className="bg-white rounded-2xl border border-[hsl(var(--border))] px-4 py-3 flex items-center justify-between gap-3 print:hidden"
@@ -507,8 +624,8 @@ export default function LessonDetailPage() {
             </p>
             <button
               onClick={handleStart}
-              disabled={statusLoading}
-              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm"
+              disabled={statusLoading || isCurrentlyStreaming}
+              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-xs"
             >
               {statusLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -551,7 +668,6 @@ export default function LessonDetailPage() {
                 ) : null}
               </span>
 
-              {/* Pause / Resume Button */}
               <button
                 onClick={isPaused || isIdle ? resume : pause}
                 className={cn(
@@ -561,7 +677,6 @@ export default function LessonDetailPage() {
                     : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border-[hsl(var(--border))]"
                 )}
                 title={isPaused || isIdle ? "Resume lesson timer" : "Pause lesson timer"}
-                aria-label={isPaused || isIdle ? "Resume lesson timer" : "Pause lesson timer"}
               >
                 {isPaused || isIdle ? (
                   <>
@@ -579,8 +694,8 @@ export default function LessonDetailPage() {
 
             <button
               onClick={handleComplete}
-              disabled={statusLoading}
-              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-sm"
+              disabled={statusLoading || isCurrentlyStreaming}
+              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shadow-xs"
             >
               {statusLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -608,12 +723,10 @@ export default function LessonDetailPage() {
         )}
       </div>
 
-      {/* Idle notification banner */}
       {isIdle && (
         <IdleBanner onResume={dismissIdle} onDismiss={dismissIdle} />
       )}
 
-      {/* Journal prompt — shown after marking complete */}
       {showJournalPrompt && (
         <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl px-4 py-2.5 flex items-center justify-between gap-3 print:hidden animate-in fade-in duration-200">
           <div className="flex items-center gap-2 min-w-0">
@@ -625,7 +738,7 @@ export default function LessonDetailPage() {
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setShowJournalModal(true)}
-              className="text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm"
+              className="text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-lg transition-colors shadow-xs"
             >
               Add note
             </button>
@@ -639,6 +752,7 @@ export default function LessonDetailPage() {
           </div>
         </div>
       )}
+
       {showJournalModal && (
         <AddEntryModal
           childId={child.id}
@@ -646,7 +760,7 @@ export default function LessonDetailPage() {
           prefill={{
             lessonId,
             subject: lesson.subject,
-            topic: content.title ?? lesson.topic,
+            topic: displayTitle,
           }}
           onClose={() => setShowJournalModal(false)}
           onSaved={() => {
@@ -656,8 +770,7 @@ export default function LessonDetailPage() {
         />
       )}
 
-      {/* Refine bar — re-generate the lesson with adjusted difficulty or
-          a different angle when this version didn't land. Hidden in print. */}
+      {/* Refine bar */}
       <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-4 py-3 space-y-2 print:hidden">
         <p className="text-xs font-semibold text-brand-green-deep">
           Doesn&apos;t quite fit? Adjust this lesson:
@@ -668,12 +781,12 @@ export default function LessonDetailPage() {
             { id: "harder",      label: "Make harder",      icon: ArrowUp },
             { id: "alternative", label: "Another option",   icon: Shuffle },
           ] as const).map(({ id, label, icon: Icon }) => {
-            const isThisOne = refining === id;
-            const disabled = refining !== null;
+            const isThisOne = refiningIntent === id;
+            const disabled = isCurrentlyStreaming || statusLoading;
             return (
               <button
                 key={id}
-                onClick={() => refine(id)}
+                onClick={() => handleRefine(id)}
                 disabled={disabled}
                 className={cn(
                   "inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
@@ -692,8 +805,8 @@ export default function LessonDetailPage() {
             );
           })}
         </div>
-        {refineError && (
-          <p className="text-xs text-destructive">{refineError}</p>
+        {refineStreamError && (
+          <p className="text-xs text-destructive">{refineStreamError.message}</p>
         )}
         {refineNotice && (
           <div className="mt-2 bg-brand-mint/40 border border-brand-green/30 rounded-lg px-3 py-2 flex items-start gap-2">
@@ -718,97 +831,140 @@ export default function LessonDetailPage() {
       </div>
 
       {/* Learning objectives */}
-      <Section icon={<Target className="w-4 h-4" />} title="Learning Objectives">
-        <ObjectiveList lessonId={lessonId} objectives={objectives} />
+      <Section
+        icon={<Target className="w-4 h-4" />}
+        title="Learning Objectives"
+        isStreaming={isCurrentlyStreaming && displayObjectives.length === 0}
+      >
+        {displayObjectives.length > 0 ? (
+          <ObjectiveList lessonId={lessonId} objectives={displayObjectives} />
+        ) : (
+          <div className="space-y-2">
+            <div className="h-4 bg-muted/60 rounded animate-pulse w-4/5" />
+            <div className="h-4 bg-muted/40 rounded animate-pulse w-3/5" />
+          </div>
+        )}
       </Section>
 
       {/* Teaching guide */}
-      <Section icon={<BookOpen className="w-4 h-4" />} title="Teaching Guide">
-        <div className="space-y-4">
-          {content.teachingGuide.map((step) => (
-            <div key={step.step} className="flex gap-3.5">
-              <div className="flex flex-col items-center shrink-0">
-                <div className="w-7 h-7 rounded-full bg-brand-green text-white text-xs font-bold flex items-center justify-center shrink-0">
-                  {step.step}
+      <Section
+        icon={<BookOpen className="w-4 h-4" />}
+        title="Teaching Guide"
+        isStreaming={isCurrentlyStreaming && displayTeachingGuide.length < 4}
+      >
+        {displayTeachingGuide.length > 0 ? (
+          <div className="space-y-4">
+            {displayTeachingGuide.map((step) => (
+              <div key={step.step} className="flex gap-3.5 animate-in fade-in slide-in-from-left-2">
+                <div className="flex flex-col items-center shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-brand-green text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    {step.step}
+                  </div>
+                  {step.step < 4 && (
+                    <div className="w-px flex-1 bg-brand-green/20 mt-1.5" />
+                  )}
                 </div>
-                {step.step < content.teachingGuide.length && (
-                  <div className="w-px flex-1 bg-brand-green/20 mt-1.5" />
-                )}
+                <div className="pb-4 flex-1">
+                  <p className="font-semibold text-sm text-brand-green-deep mb-1">
+                    {step.title}
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {step.instructions}
+                  </p>
+                </div>
               </div>
-              <div className="pb-4">
-                <p className="font-semibold text-sm text-brand-green-deep mb-1">
-                  {step.title}
-                </p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {step.instructions}
-                </p>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map((s) => (
+              <div key={s} className="flex gap-3.5">
+                <div className="w-7 h-7 rounded-full bg-muted animate-pulse shrink-0" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 bg-muted/70 rounded animate-pulse w-1/3" />
+                  <div className="h-3 bg-muted/40 rounded animate-pulse w-full" />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* Activities */}
-      <Section icon={<Play className="w-4 h-4" />} title="Activities">
-        <div className="space-y-3">
-          {content.activities.map((activity, i) => {
-            const type = activity.type as ActivityType;
-            return (
-              <div
-                key={i}
-                className="rounded-xl border border-[hsl(var(--border))] px-4 py-4"
-              >
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span
-                    className={cn(
-                      "text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1",
-                      ACTIVITY_COLORS[type] ?? "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {ACTIVITY_ICONS[type] ?? "•"} {type}
-                  </span>
-                  {activity.durationMins && (
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                      {activity.durationMins} min
+      <Section
+        icon={<Play className="w-4 h-4" />}
+        title="Activities"
+        isStreaming={isCurrentlyStreaming && displayActivities.length === 0}
+      >
+        {displayActivities.length > 0 ? (
+          <div className="space-y-3">
+            {displayActivities.map((activity, i) => {
+              const type = (activity.type || "Hands-on") as ActivityType;
+              return (
+                <div
+                  key={i}
+                  className="rounded-xl border border-[hsl(var(--border))] px-4 py-4 animate-in fade-in"
+                >
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span
+                      className={cn(
+                        "text-xs font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1",
+                        ACTIVITY_COLORS[type] ?? "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {ACTIVITY_ICONS[type] ?? "•"} {type}
                     </span>
-                  )}
+                    {activity.durationMins && (
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        {activity.durationMins} min
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-semibold text-sm text-brand-green-deep mb-1">
+                    {activity.title}
+                  </p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {activity.description}
+                  </p>
                 </div>
-                <p className="font-semibold text-sm text-brand-green-deep mb-1">
-                  {activity.title}
-                </p>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {activity.description}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-dashed border-[hsl(var(--border))] p-4 space-y-2">
+              <div className="h-3 bg-muted/60 rounded animate-pulse w-20" />
+              <div className="h-4 bg-muted/80 rounded animate-pulse w-1/2" />
+              <div className="h-3 bg-muted/40 rounded animate-pulse w-full" />
+            </div>
+          </div>
+        )}
       </Section>
 
       {/* Video resources */}
-      {content.videoResources?.length > 0 && (
+      {displayVideos.length > 0 && (
         <Section icon={<Youtube className="w-4 h-4" />} title="Video Resources">
           <div className="space-y-4">
-            {content.videoResources.map((v, i) => (
-              <YouTubeEmbedCard key={i} video={v} />
+            {displayVideos.map((v, i) => (
+              <YouTubeEmbedCard key={i} video={v} isStreaming={isCurrentlyStreaming} />
             ))}
           </div>
         </Section>
       )}
 
       {/* Faith connection */}
-      {hasFaith && content.faithConnection && (
-        <div className="rounded-2xl bg-brand-mint/50 border border-brand-green/25 px-5 py-5">
+      {displayFaith && (
+        <div className="rounded-2xl bg-brand-mint/50 border border-brand-green/25 px-5 py-5 animate-in fade-in">
           <h2 className="font-display font-semibold text-brand-green-deep flex items-center gap-2 mb-4">
             <span>🌙</span> Faith Connection
           </h2>
 
-          {content.faithConnection.arabicText && (
+          {displayFaith.arabicText && (
             <p
               dir="rtl"
               className="text-right font-arabic text-xl text-brand-green-deep leading-loose mb-3 bg-white/60 rounded-xl px-4 py-3"
             >
-              {content.faithConnection.arabicText}
+              {displayFaith.arabicText}
             </p>
           )}
 
@@ -818,24 +974,24 @@ export default function LessonDetailPage() {
                 Reference
               </span>
               <span className="text-sm text-brand-green-deep font-medium">
-                {content.faithConnection.reference}
+                {displayFaith.reference}
               </span>
             </div>
 
-            {content.faithConnection.translation && (
+            {displayFaith.translation && (
               <div className="flex gap-2.5 items-start">
                 <span className="text-xs font-bold text-brand-green uppercase tracking-wide shrink-0 mt-0.5">
                   Translation
                 </span>
                 <span className="text-sm text-brand-green-deep/80 italic leading-relaxed">
-                  &ldquo;{content.faithConnection.translation}&rdquo;
+                  &ldquo;{displayFaith.translation}&rdquo;
                 </span>
               </div>
             )}
 
             <div className="bg-white/60 rounded-xl px-4 py-3 mt-1">
               <p className="text-sm text-brand-green-deep leading-relaxed">
-                {content.faithConnection.explanation}
+                {displayFaith.explanation}
               </p>
             </div>
           </div>
@@ -843,38 +999,38 @@ export default function LessonDetailPage() {
       )}
 
       {/* Day out */}
-      {content.dayOut && (
+      {displayDayOut && (
         <Section icon={<MapPin className="w-4 h-4" />} title="Day Out Idea">
           <div className="space-y-2">
             <div className="flex items-start gap-2.5">
               <MapPin className="w-4 h-4 text-brand-green mt-0.5 shrink-0" />
               <div>
                 <p className="font-semibold text-brand-green-deep text-sm">
-                  {content.dayOut.venueName}
+                  {displayDayOut.venueName}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {content.dayOut.address}
+                  {displayDayOut.address}
                 </p>
               </div>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed pl-6">
-              {content.dayOut.description}
+              {displayDayOut.description}
             </p>
           </div>
         </Section>
       )}
 
       {/* Quiz */}
-      {content.quiz?.length > 0 && (
+      {displayQuiz.length > 0 && (
         <Section icon={<Lightbulb className="w-4 h-4" />} title="Quick Quiz">
-          <QuizSection questions={content.quiz} />
+          <QuizSection questions={displayQuiz} isStreaming={isCurrentlyStreaming} />
         </Section>
       )}
 
       {/* Bottom padding */}
       <div className="h-4" />
 
-      {/* Floating Ask-AI button — context-aware to this lesson */}
+      {/* Floating Ask-AI button */}
       <LessonChat lessonId={lessonId} />
 
       {/* Sticky floating pill HUD in top right when scrolled past top timer */}
@@ -894,7 +1050,7 @@ export default function LessonDetailPage() {
       <LessonCompletionModal
         isOpen={showCompletionModal}
         childName={child.name}
-        lessonTitle={content.title ?? lesson.topic}
+        lessonTitle={displayTitle}
         subject={lesson.subject}
         feedback={completionFeedback}
         onClose={() => setShowCompletionModal(false)}

@@ -7,27 +7,35 @@ import type { VideoResource } from "@/lib/lessonGenerator";
 
 interface YouTubeEmbedCardProps {
   video: VideoResource;
+  isStreaming?: boolean;
 }
 
-export function YouTubeEmbedCard({ video }: YouTubeEmbedCardProps) {
+export function YouTubeEmbedCard({ video, isStreaming = false }: YouTubeEmbedCardProps) {
   const initialId =
-    video.youtubeId ||
-    extractYouTubeVideoId(video.url) ||
-    extractYouTubeVideoId(video.searchQuery) ||
+    video?.youtubeId ||
+    extractYouTubeVideoId(video?.url) ||
+    extractYouTubeVideoId(video?.searchQuery) ||
     null;
 
   const [resolvedId, setResolvedId] = useState<string | null>(initialId);
   const [loading, setLoading] = useState(!initialId);
 
   useEffect(() => {
-    // If we already have a valid video ID, no need to resolve
-    if (resolvedId) {
+    if (initialId) {
+      setResolvedId(initialId);
       setLoading(false);
+    }
+  }, [initialId]);
+
+  useEffect(() => {
+    // If we're currently streaming content or already have an ID, do not fetch
+    if (isStreaming || resolvedId) {
+      setLoading(!resolvedId && isStreaming);
       return;
     }
 
-    const query = video.searchQuery || video.title;
-    if (!query) {
+    const query = video?.searchQuery || video?.title;
+    if (!query || query.length < 4) {
       setLoading(false);
       return;
     }
@@ -35,37 +43,39 @@ export function YouTubeEmbedCard({ video }: YouTubeEmbedCardProps) {
     let cancelled = false;
     setLoading(true);
 
-    fetch(`/api/youtube/resolve?q=${encodeURIComponent(query)}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to resolve");
-        return res.json();
-      })
-      .then((data) => {
-        if (!cancelled && data.videoId) {
-          setResolvedId(data.videoId);
-        }
-      })
-      .catch((err) => {
-        console.warn("[YouTubeEmbedCard] Resolve error:", err);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
+    const timer = setTimeout(() => {
+      fetch(`/api/youtube/resolve?q=${encodeURIComponent(query)}`)
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to resolve");
+          return res.json();
+        })
+        .then((data) => {
+          if (!cancelled && data.videoId) {
+            setResolvedId(data.videoId);
+          }
+        })
+        .catch((err) => {
+          console.warn("[YouTubeEmbedCard] Resolve error:", err);
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoading(false);
+          }
+        });
+    }, 500);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [video.searchQuery, video.title, video.url, video.youtubeId, resolvedId]);
+  }, [video?.searchQuery, video?.title, video?.url, video?.youtubeId, resolvedId, isStreaming]);
 
-  // Actual direct video link when ID is resolved, or video.url if valid, or search fallback
   const directWatchUrl = resolvedId
     ? `https://www.youtube.com/watch?v=${resolvedId}`
-    : video.url && !video.url.includes("search_query")
+    : video?.url && !video.url.includes("search_query")
     ? video.url
     : `https://www.youtube.com/results?search_query=${encodeURIComponent(
-        video.searchQuery || video.title
+        video?.searchQuery || video?.title || ""
       )}`;
 
   const embedUrl = resolvedId
@@ -81,9 +91,9 @@ export function YouTubeEmbedCard({ video }: YouTubeEmbedCardProps) {
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-brand-green-deep truncate">
-              {video.title}
+              {video?.title || "Educational Video"}
             </p>
-            {video.searchQuery && (
+            {video?.searchQuery && (
               <p className="text-xs text-muted-foreground truncate">
                 Topic: {video.searchQuery}
               </p>
@@ -106,7 +116,7 @@ export function YouTubeEmbedCard({ video }: YouTubeEmbedCardProps) {
         {embedUrl ? (
           <iframe
             src={embedUrl}
-            title={video.title || "YouTube video player"}
+            title={video?.title || "YouTube video player"}
             className="absolute inset-0 w-full h-full border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen

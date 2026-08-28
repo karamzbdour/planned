@@ -46,14 +46,9 @@ prisma/*.db
 prisma/*.db-journal
 .env*.local
 
-<<<<<<< Updated upstream
-#agents
-.agents
-=======
 # Uploads
 /public/uploads
 
-# Agents
-.agents
+# Docs
+/.docs
 
->>>>>>> Stashed changes
