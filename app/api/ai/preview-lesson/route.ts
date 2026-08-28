@@ -72,6 +72,41 @@ function generateFallbackPreview(params: PreviewRequest): PreviewLesson {
   };
 }
 
+// In-memory cache & in-flight promise deduplication
+interface CacheEntry {
+  preview: PreviewLesson;
+  timestamp: number;
+}
+
+const previewCache = new Map<string, CacheEntry>();
+const inFlightRequests = new Map<string, Promise<PreviewLesson>>();
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
+const MAX_CACHE_ENTRIES = 500;
+
+function getCacheKey(
+  childName: string,
+  age: number,
+  interests: string,
+  learningStyle: string,
+  curriculum: string,
+  faith: string,
+  faithIntegration: boolean,
+  location: string,
+  subject: string
+): string {
+  return [
+    childName.trim().toLowerCase(),
+    age,
+    interests.trim().toLowerCase(),
+    learningStyle.trim().toLowerCase(),
+    curriculum.trim().toLowerCase(),
+    faith.trim().toLowerCase(),
+    faithIntegration,
+    location.trim().toLowerCase(),
+    subject.trim().toLowerCase(),
+  ].join("::");
+}
+
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "anonymous";
@@ -94,9 +129,31 @@ export async function POST(req: Request) {
     const location = body.location?.trim() || "United Kingdom";
     const subject = body.subject || "Science";
 
-    // Try live AI generation via Gemini
-    try {
-      const prompt = `You are an expert homeschool AI tutor generating a short, exciting, bespoke sample lesson preview for a UK homeschooling family.
+    const cacheKey = getCacheKey(
+      childName,
+      age,
+      interests,
+      learningStyle,
+      curriculum,
+      faith,
+      faithIntegration,
+      location,
+      subject
+    );
+
+    // 1. Check completed cache
+    const cached = previewCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return NextResponse.json({ preview: cached.preview });
+    }
+
+    // 2. Check if a request for this exact subject/profile is currently in-flight
+    let previewPromise = inFlightRequests.get(cacheKey);
+
+    if (!previewPromise) {
+      previewPromise = (async () => {
+        try {
+          const prompt = `You are an expert homeschool AI tutor generating a short, exciting, bespoke sample lesson preview for a UK homeschooling family.
 
 Child: ${childName} (Age: ${age})
 Interests: ${interests}
@@ -125,25 +182,41 @@ Generate a concise JSON response matching EXACTLY this structure (no markdown, j
   ${faith !== "SECULAR" && faithIntegration ? '"faithReflection": "1 warm sentence connecting this to faith values",' : '"faithReflection": null,'}
 }`;
 
-      const res = await ai.messages.create({
-        model: MODEL,
-        max_tokens: 600,
-        messages: [{ role: "user", content: prompt }],
-      });
+          const res = await ai.messages.create({
+            model: MODEL,
+            max_tokens: 600,
+            messages: [{ role: "user", content: prompt }],
+          });
 
-      const text = res.content[0]?.text || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed: PreviewLesson = JSON.parse(jsonMatch[0]);
-        return NextResponse.json({ preview: parsed });
-      }
-    } catch (aiErr) {
-      console.warn("AI generation failed for onboarding preview, falling back to synthesis:", aiErr);
+          const text = res.content[0]?.text || "";
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed: PreviewLesson = JSON.parse(jsonMatch[0]);
+            return parsed;
+          }
+        } catch (aiErr) {
+          console.warn("AI generation failed for onboarding preview, falling back to synthesis:", aiErr);
+        }
+
+        return generateFallbackPreview(body);
+      })();
+
+      inFlightRequests.set(cacheKey, previewPromise);
     }
 
-    // Fallback template synthesis
-    const fallback = generateFallbackPreview(body);
-    return NextResponse.json({ preview: fallback });
+    try {
+      const preview = await previewPromise;
+
+      if (previewCache.size >= MAX_CACHE_ENTRIES) {
+        const keysToDelete = Array.from(previewCache.keys()).slice(0, 50);
+        for (const k of keysToDelete) previewCache.delete(k);
+      }
+      previewCache.set(cacheKey, { preview, timestamp: Date.now() });
+
+      return NextResponse.json({ preview });
+    } finally {
+      inFlightRequests.delete(cacheKey);
+    }
   } catch (error) {
     console.error("Preview lesson route error:", error);
     return NextResponse.json({ preview: generateFallbackPreview({}) });

@@ -9,10 +9,9 @@ import {
   Loader2,
   Check,
   Star,
-  Minus,
-  Plus,
   Zap,
 } from "lucide-react";
+import { AgeCarousel } from "@/components/onboarding/age-carousel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -411,61 +410,11 @@ function OnboardingChildContent() {
                 />
               </div>
 
-              <div>
-                <span id="child-age-heading" className="text-sm font-medium text-brand-green-deep block mb-3">
-                  Age
-                </span>
-                <div className="flex items-center gap-4">
-                  <button
-                    type="button"
-                    aria-label="Decrease child's age"
-                    onClick={() => update({ age: Math.max(4, data.age - 1) })}
-                    disabled={data.age <= 4}
-                    className="w-11 h-11 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-brand-green hover:text-brand-green transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green disabled:opacity-40"
-                  >
-                    <Minus aria-hidden="true" className="w-4 h-4" />
-                  </button>
-
-                  <div className="flex-1 text-center">
-                    <p aria-live="polite" aria-atomic="true" className="font-display text-4xl font-bold text-brand-green-deep">
-                      {data.age}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {ageToYearGroup(data.age)}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    aria-label="Increase child's age"
-                    onClick={() => update({ age: Math.min(11, data.age + 1) })}
-                    disabled={data.age >= 11}
-                    className="w-11 h-11 rounded-xl border-2 border-border flex items-center justify-center text-muted-foreground hover:border-brand-green hover:text-brand-green transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green disabled:opacity-40"
-                  >
-                    <Plus aria-hidden="true" className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Age track */}
-                <div role="group" aria-label="Quick age select" className="flex justify-between mt-4 gap-1">
-                  {Array.from({ length: 8 }, (_, i) => i + 4).map((a) => (
-                    <button
-                      key={a}
-                      type="button"
-                      aria-label={`Set age to ${a} (${ageToYearGroup(a)})`}
-                      aria-pressed={a === data.age}
-                      onClick={() => update({ age: a })}
-                      className={`flex-1 h-1.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green ${
-                        a === data.age ? "bg-brand-green" : "bg-muted"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between mt-1 text-xs text-muted-foreground" aria-hidden="true">
-                  <span>4</span>
-                  <span>11</span>
-                </div>
-              </div>
+              {/* Age Carousel */}
+              <AgeCarousel
+                value={data.age}
+                onChange={(age) => update({ age })}
+              />
             </div>
           )}
 

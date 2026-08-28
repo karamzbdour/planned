@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,16 +17,11 @@ import {
   Palette,
   Clock,
   MapPin,
-  Plus,
-  Trash2,
-  Minus,
-  User,
   Sparkles,
-  RefreshCw,
   BookOpen,
-  Target,
   Lightbulb,
 } from "lucide-react";
+import { AgeCarousel } from "@/components/onboarding/age-carousel";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,7 +42,7 @@ interface WizardData {
   faithIntegration: boolean;
   // Step 4 — location
   location: string;
-  // Step 5 — children
+  // Step 5 — child
   children: ChildInput[];
   // Step 6 — account credentials
   name: string;
@@ -81,13 +76,12 @@ const STEP_LABELS = [
   "Curriculum",
   "Faith & culture",
   "Location",
-  "Children",
+  "Child profile",
   "Create account",
 ];
 
 const STORAGE_KEY_DATA = "planned:onboarding:data";
 const STORAGE_KEY_STEP = "planned:onboarding:step";
-const STORAGE_KEY_CHILD_IDX = "planned:onboarding:activeChildIndex";
 
 const GOALS = [
   { id: "academics", label: "Strong academics", icon: <GraduationCap className="w-5 h-5" /> },
@@ -161,6 +155,22 @@ const LEARNING_STYLES = [
     emoji: "🤲",
   },
 ];
+
+// ─── Age to year group ────────────────────────────────────────────────────────
+
+function ageToYearGroup(age: number): string {
+  const map: Record<number, string> = {
+    4: "Reception",
+    5: "Year 1",
+    6: "Year 2",
+    7: "Year 3",
+    8: "Year 4",
+    9: "Year 5",
+    10: "Year 6",
+    11: "Year 7",
+  };
+  return map[age] ?? "Year 1";
+}
 
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
@@ -275,12 +285,12 @@ function OnboardingContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [activeChildIndex, setActiveChildIndex] = useState(0);
 
   // AI Preview state
   const [previewSubject, setPreviewSubject] = useState("Science");
-  const [previewLesson, setPreviewLesson] = useState<PreviewLesson | null>(null);
+  const [previewCache, setPreviewCache] = useState<Record<string, PreviewLesson>>({});
   const [previewLoading, setPreviewLoading] = useState(false);
+  const inFlightRequests = useRef<Set<string>>(new Set());
 
   const [data, setData] = useState<WizardData>({
     name: "",
@@ -311,16 +321,12 @@ function OnboardingContent() {
           setData((prev) => ({
             ...prev,
             ...parsed,
+            children:
+              Array.isArray(parsed.children) && parsed.children.length > 0
+                ? [parsed.children[0]]
+                : prev.children,
             password: "", // do not restore password for safety
           }));
-        }
-      }
-
-      const savedChildIdx = localStorage.getItem(STORAGE_KEY_CHILD_IDX);
-      if (savedChildIdx !== null) {
-        const idx = parseInt(savedChildIdx, 10);
-        if (!isNaN(idx) && idx >= 0) {
-          setActiveChildIndex(idx);
         }
       }
 
@@ -361,7 +367,7 @@ function OnboardingContent() {
     }
   }, [stepParam]);
 
-  // 3. Save data and active child index to localStorage whenever they change
+  // 3. Save data to localStorage whenever it changes
   useEffect(() => {
     if (!isHydrated) return;
     try {
@@ -371,15 +377,6 @@ function OnboardingContent() {
       console.error("Failed to save onboarding data:", e);
     }
   }, [data, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_CHILD_IDX, String(activeChildIndex));
-    } catch (e) {
-      console.error("Failed to save child index:", e);
-    }
-  }, [activeChildIndex, isHydrated]);
 
   function goToStep(targetStep: number) {
     const clamped = Math.max(1, Math.min(TOTAL_STEPS, targetStep));
@@ -407,68 +404,55 @@ function OnboardingContent() {
     });
   }
 
-  function updateChild(index: number, patch: Partial<ChildInput>) {
+  function updateChild(patch: Partial<ChildInput>) {
     setData((prev) => {
-      const updated = [...prev.children];
-      updated[index] = { ...updated[index], ...patch };
-      return { ...prev, children: updated };
+      const currentChild = prev.children[0] ?? {
+        name: "",
+        age: 6,
+        interests: [],
+        learningStyle: "visual",
+      };
+      return {
+        ...prev,
+        children: [{ ...currentChild, ...patch }],
+      };
     });
     setError("");
   }
 
-  function addChild() {
-    setData((prev) => ({
-      ...prev,
-      children: [
-        ...prev.children,
-        {
-          name: "",
-          age: 6,
-          interests: [],
-          learningStyle: "visual",
-        },
-      ],
-    }));
-    setActiveChildIndex(data.children.length);
-    setError("");
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }
-
-  function removeChild(index: number) {
-    if (data.children.length <= 1) return;
-    setData((prev) => ({
-      ...prev,
-      children: prev.children.filter((_, i) => i !== index),
-    }));
-    if (activeChildIndex >= index && activeChildIndex > 0) {
-      setActiveChildIndex((i) => i - 1);
-    }
-    setError("");
-  }
-
-  function toggleChildInterest(childIndex: number, interestId: string) {
-    const currentInterests = data.children[childIndex].interests;
+  function toggleChildInterest(interestId: string) {
+    const currentChild = data.children[0] ?? {
+      name: "",
+      age: 6,
+      interests: [],
+      learningStyle: "visual",
+    };
+    const currentInterests = currentChild.interests;
     const nextInterests = currentInterests.includes(interestId)
       ? currentInterests.filter((id) => id !== interestId)
       : [...currentInterests, interestId];
-    updateChild(childIndex, { interests: nextInterests });
+    updateChild({ interests: nextInterests });
   }
 
   // ── AI Preview fetcher ──────────────────────────────────────────────────────
 
   const fetchPreview = useCallback(
-    async (subjectToFetch = previewSubject) => {
-      const child = data.children[0] || {
-        name: "Your Child",
-        age: 6,
-        interests: ["nature"],
-        learningStyle: "hands-on",
-      };
+    async (subjectToFetch: string) => {
+      // If already cached or currently in-flight, do not start another fetch
+      if (previewCache[subjectToFetch] || inFlightRequests.current.has(subjectToFetch)) {
+        return;
+      }
 
+      inFlightRequests.current.add(subjectToFetch);
       setPreviewLoading(true);
       try {
+        const child = data.children[0] || {
+          name: "Your Child",
+          age: 6,
+          interests: ["nature"],
+          learningStyle: "hands-on",
+        };
+
         const res = await fetch("/api/ai/preview-lesson", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -488,23 +472,31 @@ function OnboardingContent() {
         if (res.ok) {
           const body = await res.json();
           if (body.preview) {
-            setPreviewLesson(body.preview);
+            setPreviewCache((prev) => {
+              // Never overwrite an existing cached preview
+              if (prev[subjectToFetch]) return prev;
+              return {
+                ...prev,
+                [subjectToFetch]: body.preview,
+              };
+            });
           }
         }
       } catch (err) {
         console.error("Failed to load preview:", err);
       } finally {
+        inFlightRequests.current.delete(subjectToFetch);
         setPreviewLoading(false);
       }
     },
-    [data, previewSubject]
+    [data, previewCache]
   );
 
   useEffect(() => {
-    if (step === 6 && !previewLesson) {
-      fetchPreview();
+    if (step === 6 && !previewCache[previewSubject] && !inFlightRequests.current.has(previewSubject)) {
+      fetchPreview(previewSubject);
     }
-  }, [step, previewLesson, fetchPreview]);
+  }, [step, previewSubject, previewCache, fetchPreview]);
 
   // ── Steps 1–5: Preference & Children navigation ───────────────────────────
 
@@ -526,21 +518,15 @@ function OnboardingContent() {
       return;
     }
     if (step === 5) {
-      const unnamedIdx = data.children.findIndex((c) => !c.name.trim());
-      if (unnamedIdx !== -1) {
-        setActiveChildIndex(unnamedIdx);
-        setError(`Please enter a name for Child #${unnamedIdx + 1}.`);
+      const child = data.children[0];
+      if (!child || !child.name.trim()) {
+        setError("Please enter your child's name.");
         return;
       }
-      const noInterestsIdx = data.children.findIndex((c) => c.interests.length === 0);
-      if (noInterestsIdx !== -1) {
-        setActiveChildIndex(noInterestsIdx);
-        const childName = data.children[noInterestsIdx].name || `Child #${noInterestsIdx + 1}`;
-        setError(`Please select at least one interest for ${childName}.`);
+      if (child.interests.length === 0) {
+        setError(`Please select at least one interest for ${child.name.trim()}.`);
         return;
       }
-      // Prefetch preview for step 6
-      fetchPreview(previewSubject);
     }
     setError("");
     goToStep(step + 1);
@@ -612,8 +598,9 @@ function OnboardingContent() {
       return;
     }
 
-    // 4. Save each child profile
-    for (const child of data.children) {
+    // 4. Save child profile
+    const child = data.children[0];
+    if (child) {
       const childRes = await fetch("/api/onboarding/child", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -631,13 +618,18 @@ function OnboardingContent() {
         setLoading(false);
         return;
       }
+
+      const childBody = await childRes.json().catch(() => null);
+      if (childBody?.child?.id) {
+        localStorage.setItem("planned:activeChildId", childBody.child.id);
+      }
     }
 
     // Clear saved draft on successful submission
     try {
       localStorage.removeItem(STORAGE_KEY_DATA);
       localStorage.removeItem(STORAGE_KEY_STEP);
-      localStorage.removeItem(STORAGE_KEY_CHILD_IDX);
+      localStorage.removeItem("planned:onboarding:activeChildIndex");
     } catch (e) {
       console.error("Failed to clean up onboarding draft:", e);
     }
@@ -647,15 +639,6 @@ function OnboardingContent() {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-
-  const stepLabels = [
-    "Goals",
-    "Curriculum",
-    "Faith & culture",
-    "Location",
-    "Children",
-    "Create account",
-  ];
 
   if (!isHydrated) {
     return <OnboardingSkeleton />;
@@ -906,18 +889,16 @@ function OnboardingContent() {
               </div>
             )}
 
-            {/* ── Step 5: Children Profiles ── */}
+            {/* ── Step 5: Child Profile ── */}
             {step === 5 && (
               <div className="p-5 sm:p-8 space-y-6">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 id="children-heading" className="font-display text-2xl font-bold text-brand-green-deep">
-                      Tell us about your children
-                    </h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      We personalize lessons around each child&apos;s age, interests, and learning style.
-                    </p>
-                  </div>
+                <div>
+                  <h2 id="child-heading" className="font-display text-2xl font-bold text-brand-green-deep">
+                    Tell us about your child
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    We&apos;ll personalise lessons around their age, interests, and learning style.
+                  </p>
                 </div>
 
                 {error && (
@@ -926,195 +907,106 @@ function OnboardingContent() {
                   </div>
                 )}
 
-                {/* Children Tabs / Switcher */}
-                <div
-                  role="tablist"
-                  aria-label="Children profiles"
-                  className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none"
-                >
-                  {data.children.map((child, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      role="tab"
-                      id={`child-tab-${idx}`}
-                      aria-controls={`child-panel-${idx}`}
-                      aria-selected={activeChildIndex === idx}
-                      onClick={() => setActiveChildIndex(idx)}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green
-                        ${activeChildIndex === idx
-                          ? "bg-brand-green text-white border-brand-green shadow-xs"
-                          : "bg-muted/40 text-muted-foreground hover:bg-muted border-border/50"
-                        }`}
-                    >
-                      <User aria-hidden="true" className="w-3.5 h-3.5" />
-                      <span>{child.name.trim() || `Child #${idx + 1}`}</span>
-                    </button>
-                  ))}
-
-                  <button
-                    type="button"
-                    aria-label="Add another child"
-                    onClick={addChild}
-                    className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-semibold border border-dashed border-brand-green text-brand-green hover:bg-brand-mint/40 shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
-                  >
-                    <Plus aria-hidden="true" className="w-3.5 h-3.5" />
-                    <span>Add child</span>
-                  </button>
+                {/* Child Name */}
+                <div>
+                  <label htmlFor="child-name" className="text-sm font-medium text-brand-green-deep block mb-1.5">
+                    Child&apos;s first name
+                  </label>
+                  <input
+                    id="child-name"
+                    type="text"
+                    value={data.children[0]?.name ?? ""}
+                    onChange={(e) => updateChild({ name: e.target.value })}
+                    placeholder="e.g. Leo"
+                    className="w-full h-11 px-4 rounded-xl border border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green placeholder:text-muted-foreground"
+                  />
                 </div>
 
-                {/* Active Child Form */}
-                {data.children[activeChildIndex] && (
-                  <div
-                    role="tabpanel"
-                    id={`child-panel-${activeChildIndex}`}
-                    aria-labelledby={`child-tab-${activeChildIndex}`}
-                    className="bg-brand-mint/20 rounded-2xl p-4 sm:p-5 border border-brand-green/20 space-y-5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-brand-green-deep flex items-center gap-1.5">
-                        <Sparkles aria-hidden="true" className="w-3.5 h-3.5 text-brand-green" />
-                        Child #{activeChildIndex + 1} Profile
-                      </span>
-                      {data.children.length > 1 && (
+                {/* Child Age Carousel */}
+                <AgeCarousel
+                  value={data.children[0]?.age ?? 6}
+                  onChange={(age) => updateChild({ age })}
+                />
+
+                {/* Interests */}
+                <div>
+                  <span id="child-interests-label" className="text-sm font-medium text-brand-green-deep block mb-2">
+                    Interests & hobbies <span className="text-muted-foreground font-normal text-xs">(choose any)</span>
+                  </span>
+                  <div role="group" aria-labelledby="child-interests-label" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {INTERESTS.map(({ id, label, emoji }) => {
+                      const selected = data.children[0]?.interests.includes(id) ?? false;
+                      return (
                         <button
+                          key={id}
                           type="button"
-                          aria-label={`Remove child #${activeChildIndex + 1}${data.children[activeChildIndex].name ? ` (${data.children[activeChildIndex].name})` : ""}`}
-                          onClick={() => removeChild(activeChildIndex)}
-                          className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-lg p-1"
+                          aria-pressed={selected}
+                          onClick={() => toggleChildInterest(id)}
+                          className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green
+                            ${selected
+                              ? "border-brand-green bg-brand-mint text-brand-green-deep font-semibold shadow-xs"
+                              : "border-border/60 bg-white text-muted-foreground hover:border-brand-green/40 hover:bg-brand-mint/20"
+                            }`}
                         >
-                          <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
-                          Remove
+                          <span aria-hidden="true" className="text-base leading-none">{emoji}</span>
+                          <span className="text-xs truncate">{label}</span>
                         </button>
-                      )}
-                    </div>
-
-                    {/* Child Name */}
-                    <div>
-                      <label htmlFor={`child-name-${activeChildIndex}`} className="text-xs font-medium text-brand-green-deep block mb-1">
-                        Child&apos;s first name
-                      </label>
-                      <input
-                        id={`child-name-${activeChildIndex}`}
-                        type="text"
-                        value={data.children[activeChildIndex].name}
-                        onChange={(e) => updateChild(activeChildIndex, { name: e.target.value })}
-                        placeholder="e.g. Leo"
-                        className="w-full h-10 px-3.5 rounded-xl border border-input bg-white text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green placeholder:text-muted-foreground"
-                      />
-                    </div>
-
-                    {/* Child Age */}
-                    <div>
-                      <span id={`child-age-label-${activeChildIndex}`} className="text-xs font-medium text-brand-green-deep block mb-1">
-                        Age
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          aria-label={`Decrease age for ${data.children[activeChildIndex].name || `Child #${activeChildIndex + 1}`}`}
-                          onClick={() =>
-                            updateChild(activeChildIndex, {
-                              age: Math.max(4, data.children[activeChildIndex].age - 1),
-                            })
-                          }
-                          disabled={data.children[activeChildIndex].age <= 4}
-                          className="w-9 h-9 rounded-xl border border-input bg-white flex items-center justify-center text-foreground hover:bg-muted disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
-                        >
-                          <Minus aria-hidden="true" className="w-4 h-4" />
-                        </button>
-                        <span aria-live="polite" className="text-sm font-bold text-brand-green-deep w-24 text-center">
-                          {data.children[activeChildIndex].age} years old
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Increase age for ${data.children[activeChildIndex].name || `Child #${activeChildIndex + 1}`}`}
-                          onClick={() =>
-                            updateChild(activeChildIndex, {
-                              age: Math.min(11, data.children[activeChildIndex].age + 1),
-                            })
-                          }
-                          disabled={data.children[activeChildIndex].age >= 11}
-                          className="w-9 h-9 rounded-xl border border-input bg-white flex items-center justify-center text-foreground hover:bg-muted disabled:opacity-40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
-                        >
-                          <Plus aria-hidden="true" className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Interests */}
-                    <div>
-                      <span id={`child-interests-label-${activeChildIndex}`} className="text-xs font-medium text-brand-green-deep block mb-1.5">
-                        Interests & hobbies
-                      </span>
-                      <div role="group" aria-labelledby={`child-interests-label-${activeChildIndex}`} className="grid grid-cols-3 gap-2">
-                        {INTERESTS.map(({ id, label, emoji }) => {
-                          const selected = data.children[activeChildIndex].interests.includes(id);
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() => toggleChildInterest(activeChildIndex, id)}
-                              className={`flex items-center gap-1.5 p-2 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green
-                                ${selected
-                                  ? "border-brand-green bg-white text-brand-green-deep font-semibold shadow-xs"
-                                  : "border-border/50 bg-white/70 text-muted-foreground hover:border-brand-green/40 hover:bg-white"
-                                }`}
-                            >
-                              <span aria-hidden="true" className="text-base leading-none">{emoji}</span>
-                              <span className="text-xs truncate">{label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Learning Style */}
-                    <div>
-                      <span id={`child-style-label-${activeChildIndex}`} className="text-xs font-medium text-brand-green-deep block mb-1.5">
-                        Learning style
-                      </span>
-                      <div role="radiogroup" aria-labelledby={`child-style-label-${activeChildIndex}`} className="grid grid-cols-3 gap-2">
-                        {LEARNING_STYLES.map(({ id, label, emoji, description }) => {
-                          const selected = data.children[activeChildIndex].learningStyle === id;
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              role="radio"
-                              aria-checked={selected}
-                              onClick={() => updateChild(activeChildIndex, { learningStyle: id })}
-                              className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green
-                                ${selected
-                                  ? "border-brand-green bg-white text-brand-green-deep font-semibold shadow-xs"
-                                  : "border-border/50 bg-white/70 text-muted-foreground hover:border-brand-green/40 hover:bg-white"
-                                }`}
-                            >
-                              <span aria-hidden="true" className="text-xl mb-1">{emoji}</span>
-                              <div>
-                                <p className="text-xs font-semibold leading-tight">{label}</p>
-                                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">
-                                  {description}
-                                </p>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
 
-                {/* Add another child button */}
-                <button
-                  type="button"
-                  onClick={addChild}
-                  className="w-full py-3 rounded-2xl border-2 border-dashed border-brand-green/50 text-brand-green font-semibold text-sm hover:bg-brand-mint/30 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green"
-                >
-                  <Plus aria-hidden="true" className="w-4 h-4" />
-                  Add another child
-                </button>
+                {/* Learning Style */}
+                <div>
+                  <span id="child-style-label" className="text-sm font-medium text-brand-green-deep block mb-2">
+                    Learning style <span className="text-muted-foreground font-normal text-xs">(pick one)</span>
+                  </span>
+                  <div role="radiogroup" aria-labelledby="child-style-label" className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {LEARNING_STYLES.map(({ id, label, emoji, description }) => {
+                      const selected = (data.children[0]?.learningStyle ?? "visual") === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => updateChild({ learningStyle: id })}
+                          className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green
+                            ${selected
+                              ? "border-brand-green bg-brand-mint text-brand-green-deep font-semibold shadow-xs"
+                              : "border-border/60 bg-white text-muted-foreground hover:border-brand-green/40 hover:bg-brand-mint/20"
+                            }`}
+                        >
+                          <span aria-hidden="true" className="text-xl mb-1.5">{emoji}</span>
+                          <div>
+                            <p className="text-xs font-semibold leading-tight">{label}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                              {description}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Premium Feature Indication Callout */}
+                <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-50/80 border border-amber-200/70 text-amber-950 text-xs">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5" aria-hidden="true">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 font-semibold text-amber-900 text-xs sm:text-sm">
+                      <span>Have more than one child?</span>
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-200/80 text-amber-900 text-[10px] font-bold tracking-wide uppercase">
+                        Premium
+                      </span>
+                    </div>
+                    <p className="text-amber-800/80 text-xs leading-relaxed">
+                      Adding multiple children is a premium feature. You can add more children anytime from your dashboard after setting up your first child.
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1250,31 +1142,18 @@ function OnboardingContent() {
             <div className="bg-gradient-to-br from-brand-mint/40 via-white to-brand-mint/20 rounded-3xl border border-brand-green/30 shadow-sm p-6 sm:p-8 flex flex-col justify-between space-y-5">
               {/* Header & Subject Selector */}
               <div className="space-y-3.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-brand-green/10 flex items-center justify-center text-brand-green shrink-0" aria-hidden="true">
-                      <Sparkles className="w-4 h-4 text-brand-green" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-brand-green-deep leading-tight">
-                        AI Lesson Preview
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        Personalised for {primaryChild.name.trim() || "your child"} (Age {primaryChild.age})
-                      </p>
-                    </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-brand-green/10 flex items-center justify-center text-brand-green shrink-0" aria-hidden="true">
+                    <Sparkles className="w-4 h-4 text-brand-green" />
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => fetchPreview(previewSubject)}
-                    disabled={previewLoading}
-                    aria-label="Regenerate sample lesson"
-                    title="Regenerate sample lesson"
-                    className="p-2 rounded-xl text-brand-green hover:bg-brand-mint/70 border border-brand-green/30 bg-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green shrink-0 shadow-2xs"
-                  >
-                    <RefreshCw aria-hidden="true" className={`w-3.5 h-3.5 ${previewLoading ? "animate-spin" : ""}`} />
-                  </button>
+                  <div>
+                    <h3 className="text-sm font-bold text-brand-green-deep leading-tight">
+                      AI Lesson Preview
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Personalised for {primaryChild.name.trim() || "your child"} (Age {primaryChild.age})
+                    </p>
+                  </div>
                 </div>
 
                 {/* Subject Selector Tabs */}
@@ -1287,7 +1166,9 @@ function OnboardingContent() {
                       aria-selected={previewSubject === subj}
                       onClick={() => {
                         setPreviewSubject(subj);
-                        fetchPreview(subj);
+                        if (!previewCache[subj] && !inFlightRequests.current.has(subj)) {
+                          fetchPreview(subj);
+                        }
                       }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green
                         ${previewSubject === subj
@@ -1303,7 +1184,7 @@ function OnboardingContent() {
 
               {/* Body: Preview Content or Shimmer */}
               <div className="flex-1 flex flex-col justify-center">
-                {previewLoading ? (
+                {previewLoading && !previewCache[previewSubject] ? (
                   <div aria-live="polite" className="py-6 space-y-4 animate-pulse">
                     <div className="flex items-center gap-2 text-xs font-medium text-brand-green">
                       <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin text-brand-green" />
@@ -1319,20 +1200,20 @@ function OnboardingContent() {
                       <div className="h-16 w-full bg-brand-mint/30 rounded-xl mt-2" />
                     </div>
                   </div>
-                ) : previewLesson ? (
+                ) : previewCache[previewSubject] ? (
                   <div className="space-y-3 text-xs">
                     {/* Lesson Header & Objective */}
                     <div className="bg-white/95 p-3.5 rounded-2xl border border-brand-green/20 shadow-2xs space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2 py-0.5 rounded-md bg-brand-green text-white text-[10px] font-bold">
-                          {previewLesson.subject}
+                          {previewCache[previewSubject].subject}
                         </span>
                         <span className="font-bold text-brand-green-deep text-xs sm:text-sm truncate">
-                          {previewLesson.topic}
+                          {previewCache[previewSubject].topic}
                         </span>
                       </div>
                       <p className="text-muted-foreground text-[11px] leading-relaxed">
-                        {previewLesson.headline || previewLesson.learningObjective}
+                        {previewCache[previewSubject].headline || previewCache[previewSubject].learningObjective}
                       </p>
                     </div>
 
@@ -1341,36 +1222,36 @@ function OnboardingContent() {
                       <div className="flex items-center gap-1.5 text-brand-green-deep">
                         <Lightbulb aria-hidden="true" className="w-3.5 h-3.5 text-brand-green shrink-0" />
                         <span className="text-[10px] font-bold uppercase tracking-wide">
-                          {previewLesson.tailoredActivity?.badge || "Tailored Activity"}
+                          {previewCache[previewSubject].tailoredActivity?.badge || "Tailored Activity"}
                         </span>
                       </div>
-                      {previewLesson.tailoredActivity?.title && (
+                      {previewCache[previewSubject].tailoredActivity?.title && (
                         <p className="font-semibold text-brand-green-deep text-xs">
-                          {previewLesson.tailoredActivity.title}
+                          {previewCache[previewSubject].tailoredActivity.title}
                         </p>
                       )}
                       <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-3">
-                        {previewLesson.tailoredActivity?.instructions}
+                        {previewCache[previewSubject].tailoredActivity?.instructions}
                       </p>
                     </div>
 
                     {/* Trip / Local suggestion */}
-                    {previewLesson.localDayOut && (
+                    {previewCache[previewSubject].localDayOut && (
                       <div className="bg-white/90 p-2.5 rounded-xl border border-brand-green/15 flex items-start gap-2 text-[11px]">
                         <MapPin aria-hidden="true" className="w-3.5 h-3.5 text-brand-green shrink-0 mt-0.5" />
                         <div>
                           <span className="font-semibold text-brand-green-deep">Trip idea: </span>
-                          <span className="text-muted-foreground">{previewLesson.localDayOut.venue} — {previewLesson.localDayOut.idea}</span>
+                          <span className="text-muted-foreground">{previewCache[previewSubject].localDayOut?.venue} — {previewCache[previewSubject].localDayOut?.idea}</span>
                         </div>
                       </div>
                     )}
 
                     {/* Faith reflection snippet if present */}
-                    {previewLesson.faithReflection && (
+                    {previewCache[previewSubject].faithReflection && (
                       <div className="bg-brand-mint/40 p-2.5 rounded-xl border border-brand-green/20 flex items-start gap-2 text-[11px]">
                         <BookOpen aria-hidden="true" className="w-3.5 h-3.5 text-brand-green shrink-0 mt-0.5" />
                         <p className="text-brand-green-deep italic">
-                          &ldquo;{previewLesson.faithReflection}&rdquo;
+                          &ldquo;{previewCache[previewSubject].faithReflection}&rdquo;
                         </p>
                       </div>
                     )}
