@@ -4,6 +4,7 @@ import { fullLessonSchema, type FullLessonData } from "@/lib/ai/schemas";
 import { generateText, Output } from "ai";
 import { fetchQuranVerse } from "@/lib/quranApi";
 import { enrichVideoResources } from "@/lib/youtube";
+import { getCurriculumSystemInstruction } from "@/lib/ai/curriculum-prompts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,11 +173,15 @@ export interface BuildLessonPromptArgs {
   refineIntent?: RefineIntent;
 }
 
-export function buildLessonPrompt(args: BuildLessonPromptArgs): {
+export interface BuildLessonPromptResult {
+  systemPrompt: string;
+  userPrompt: string;
   prompt: string;
   includeFaith: boolean;
   faith: string;
-} {
+}
+
+export function buildLessonPrompt(args: BuildLessonPromptArgs): BuildLessonPromptResult {
   const {
     childName,
     childAge,
@@ -199,19 +204,17 @@ export function buildLessonPrompt(args: BuildLessonPromptArgs): {
   const includeFaith = faith !== "SECULAR" && faithIntegration;
   const faithLabel = FAITH_LABELS[faith] ?? faith;
   const curriculumLabel = CURRICULUM_LABELS[curriculum] ?? curriculum;
-  const approachSection = curriculumApproachSection(curriculum, childName);
   const quizCount = tier === "PREMIUM" ? 10 : 5;
 
-  const faithReferenceFormat =
-    faith === "ISLAM"
-      ? `Format MUST be exact: Surah name + chapter:ayah, e.g. "Surah Al-Baqarah 2:286" or "Hadith — Sahih al-Bukhari 1:2". Never write a vague reference like "Quran" or "Quran 2" — always include the full Surah name and ayah number. If citing a Hadith, name the collection and number.`
-      : faith === "CHRISTIANITY"
-      ? `Format MUST be exact: Book chapter:verse, e.g. "Matthew 5:3" or "Proverbs 3:5-6". Never write a vague reference like "Bible" — always include the book, chapter, and verse number(s).`
-      : faith === "JUDAISM"
-      ? `Format MUST be exact: Book chapter:verse, e.g. "Genesis 1:1" or "Pirkei Avot 1:14". Never write a vague reference like "Torah" — always include the book, chapter, and verse number(s).`
-      : `Always include exact citation details (book, chapter, verse, or equivalent).`;
+  // Invariant static system instruction for prompt caching
+  const systemPrompt = getCurriculumSystemInstruction(
+    curriculum,
+    faith,
+    faithIntegration
+  );
 
-  const prompt = `You are an expert UK homeschool curriculum planner and lesson designer. Create a detailed, engaging lesson for a child to be taught at home by their parent.
+  // Dynamic user prompt suffix
+  const userPrompt = `Create a detailed, engaging lesson for this child:
 
 CHILD PROFILE:
 - Name: ${childName}
@@ -224,23 +227,29 @@ CHILD PROFILE:
 - Numeracy level: ${numeracyLevel}
 - Reasoning level: ${reasoningLevel}
 
-LESSON:
+LESSON FOCUS:
 - Subject: ${subject}
 - Topic: ${topic}
 
-FAMILY:
-- Faith: ${includeFaith ? `${faithLabel} (weave in naturally. ${faithReferenceFormat})` : "secular — no religious content"}
+FAMILY & LOCATION:
+- Faith context: ${includeFaith ? `${faithLabel} (weave in naturally)` : "secular — no religious content"}
 - Location: ${location}
-${approachSection}${refineSection(refineIntent, childName)}
+${refineSection(refineIntent, childName)}
 
-Guidelines:
+SPECIFIC OUTPUT REQUIREMENTS:
 - Generate ${quizCount} quiz questions progressing from recall to application.
 - Teaching instructions in teachingGuide should feel warm, encouraging, and practical for a parent in a home setting.
 - Connect to ${childName}'s interests (${interests}) where natural.
 - Include hands-on and creative activities tailored to the curriculum approach.
-${tier === "PREMIUM" ? `- Suggest a specific day-out venue near ${location}.` : ""}`;
+${tier === "PREMIUM" ? `- Suggest a specific day-out venue near ${location}.` : ""}`.trim();
 
-  return { prompt, includeFaith, faith };
+  return {
+    systemPrompt,
+    userPrompt,
+    prompt: `${systemPrompt}\n\n${userPrompt}`,
+    includeFaith,
+    faith,
+  };
 }
 
 export async function postProcessLessonContent(
@@ -324,7 +333,7 @@ export async function generateLesson(
   const faithIntegration = fp?.faithIntegration ?? false;
   const location = child.user.location ?? "United Kingdom";
 
-  const { prompt, includeFaith } = buildLessonPrompt({
+  const { systemPrompt, userPrompt, includeFaith } = buildLessonPrompt({
     childName: child.name,
     childAge: child.age,
     childYearGroup: child.yearGroup,
@@ -345,10 +354,11 @@ export async function generateLesson(
 
   const { output } = await generateText({
     model: geminiModel,
+    system: systemPrompt,
+    prompt: userPrompt,
     output: Output.object({
       schema: fullLessonSchema,
     }),
-    prompt,
   });
 
   return postProcessLessonContent(output, includeFaith, faith);

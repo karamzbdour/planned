@@ -7,6 +7,7 @@ import { geminiModel } from "@/lib/ai/model";
 import { weekGenerationSchema } from "@/lib/ai/schemas";
 import { getUserTier, freeWeekLimitReached, PAYWALL_RESPONSES } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
+import { getWeekGenSystemInstruction } from "@/lib/ai/curriculum-prompts";
 
 // Per-tier hourly limits for week generation.
 const WEEK_GEN_LIMITS = {
@@ -43,87 +44,6 @@ const CURRICULUM_LABELS: Record<string, string> = {
   MONTESSORI: "Montessori",
   UNSCHOOLING: "Unschooling / Child-led",
 };
-
-function buildCurriculumPrompt(
-  curriculum: string,
-  yearGroup: string | null,
-  interests: string,
-  faith: string,
-  faithIntegration: boolean,
-): string {
-  const faithReferenceRule =
-    faith === "ISLAM"
-      ? `When a lesson references the Quran or Hadith, the topic/description MUST include the exact Surah name and ayah number (e.g. "Surah Al-Baqarah 2:286") or the Hadith collection and number. Never write a vague reference like "Quran" or "Quran 2".`
-      : faith === "CHRISTIANITY"
-      ? `When a lesson references the Bible, the topic/description MUST include book + chapter:verse (e.g. "Matthew 5:3", "Proverbs 3:5-6"). No vague "Bible" references.`
-      : faith === "JUDAISM"
-      ? `When a lesson references the Torah or Talmud, include book + chapter:verse (e.g. "Genesis 1:1", "Pirkei Avot 1:14"). No vague references.`
-      : ``;
-
-  const faithLine =
-    faith !== "SECULAR" && faithIntegration
-      ? `Faith context: ${faith} — weave in naturally through stories, references, and examples where appropriate. ${faithReferenceRule}`
-      : `Faith context: secular approach — no religious content.`;
-
-  if (curriculum === "MONTESSORI") {
-    return `
-Curriculum approach: Montessori
-
-In Montessori homeschool the child works in long, uninterrupted "work periods" of 2–3 hours rather than short subject slots. Lessons are brief presentations (3-step lessons) that introduce a concept or material; the child then practises independently.
-
-Structure the week as follows (dayOffset 0=Mon … 4=Fri):
-- Each day has 3–4 "work period" entries, NOT traditional timed lessons.
-- Subject names should reflect Montessori areas: "Practical Life", "Sensorial", "Mathematics", "Language", "Cultural Studies", "Arts & Crafts", "Outdoor / Nature".
-- Topics should reference concrete Montessori materials where appropriate (e.g. "Golden Bead introduction", "Sandpaper Letters — b, d, p", "Binomial Cube exploration").
-- durationMins should be 20–30 min for presentations; 45–60 min for independent work periods.
-- Descriptions should describe what the parent presents and what the child does independently.
-- Avoid bell-schedule thinking — no "Maths at 9, English at 10" style. Instead, describe the material and the 3-step lesson.
-- Total: 15–18 work entries across the week.
-${faithLine}
-- Year group context (for material difficulty only): ${yearGroup ?? "primary"}
-- Child's interests to incorporate into cultural/language work: ${interests}`;
-  }
-
-  if (curriculum === "UNSCHOOLING") {
-    return `
-Curriculum approach: Unschooling / Child-led learning
-
-Unschooling follows the child's natural curiosity rather than a fixed timetable. There are no mandatory subjects. Learning emerges from the child's interests, real-life experiences, projects, and play.
-
-Structure the week as follows:
-- Organise the week around 2–3 **projects or themes** drawn from the child's interests: ${interests}.
-- Each day has 2–4 entries that explore the theme through different lenses (reading, creating, experimenting, visiting, discussing, watching).
-- Subject names should reflect the activity type: "Project Exploration", "Reading & Stories", "Creative Making", "Outdoor Learning", "Life Skills", "Field Trip Prep", "Reflection & Journaling".
-- Topics should be specific and connected: e.g. if interested in dinosaurs — "Create a dinosaur timeline", "Write a story from a dinosaur's perspective", "Visit natural history museum prep".
-- Descriptions should sound inviting and child-centred, written TO the parent as a facilitator, not instructor.
-- durationMins: flexible, 20–60 min. Shorter for focused activities, longer for deep project work.
-- Total: 12–15 entries across the week — fewer but richer than a structured curriculum.
-${faithLine}
-- Age/year group context (for language/complexity only): ${yearGroup ?? "primary"}`;
-  }
-
-  // Default: BNC
-  const faithSubject =
-    faith !== "SECULAR" && faithIntegration ? `Religious Studies / ${faith.charAt(0) + faith.slice(1).toLowerCase()}, ` : "";
-
-  return `
-Curriculum approach: British National Curriculum (BNC)
-
-Follow a structured Mon–Fri timetable with dedicated subject slots.
-
-Subject schedule per day:
-- Monday (0):    Maths, English, History or Geography, ${faithSubject}Art
-- Tuesday (1):   Maths, English, Science
-- Wednesday (2): Maths, English, Music or Computing
-- Thursday (3):  Maths, English, Science, Geography or History
-- Friday (4):    Maths, English, PE or Outdoor Learning
-
-That gives 4–5 lessons per day (20–25 total).
-- durationMins: 30–45 min per lesson (Maths/English 45 min, others 30 min).
-- All content age-appropriate for ${yearGroup ?? "primary"}.
-- Connect to the child's interests where natural: ${interests}.
-${faithLine}`;
-}
 
 function safeParseJson(str: string, fallback: unknown) {
   try { return JSON.parse(str); }
@@ -180,37 +100,45 @@ export async function POST(req: Request) {
   const faithIntegration = familyProfile?.faithIntegration ?? false;
   const curriculumLabel  = CURRICULUM_LABELS[curriculum] ?? curriculum;
 
-  const curriculumSection = buildCurriculumPrompt(
+  // ── Invariant static system instruction for prompt caching ────────────────
+  const systemInstruction = getWeekGenSystemInstruction(
     curriculum,
-    child.yearGroup,
-    interests,
     faith,
-    faithIntegration,
+    faithIntegration
   );
 
-  // ── Build the prompt ──────────────────────────────────────────────────────
-  const prompt = `You are an expert UK homeschool curriculum planner. Generate a personalised week of lessons (Monday to Friday, dayOffset 0 to 4) for this child:
+  // ── Dynamic user prompt suffix ────────────────────────────────────────────
+  const prompt = `Generate a personalised 5-day week timetable of lessons (Monday to Friday, dayOffset 0 to 4) for this child:
 
-Name: ${child.name}
-Age: ${child.age ?? "unknown"}
-Year Group: ${child.yearGroup ?? "unknown"}
-Learning style: ${child.learningStyle ?? "balanced"}
-Curriculum: ${curriculumLabel}
-${curriculumSection}
+CHILD PROFILE:
+- Name: ${child.name}
+- Age: ${child.age ?? "primary school age"}
+- Year Group: ${child.yearGroup ?? "primary"}
+- Learning style: ${child.learningStyle ?? "balanced"}
+- Curriculum: ${curriculumLabel}
+- Interests: ${interests}
 
-Important guidelines:
-- Follow the curriculum approach described above — do NOT use a BNC timetable for Montessori or Unschooling.
-- Make objectives measurable and age-appropriate for ${child.yearGroup ?? "primary age"}.
-- Descriptions should be warm, specific, and refer to ${child.name} by name.
-- Connect to interests (${interests}) wherever natural.`;
+CONTENT RIGHT-SIZING CONSTRAINTS:
+- For each lesson, generate:
+  * dayOffset: 0 (Mon), 1 (Tue), 2 (Wed), 3 (Thu), 4 (Fri)
+  * subject: Subject name matched to the curriculum timetable structure
+  * topic: Engaging, specific topic title
+  * durationMins: Appropriate lesson duration (typically 30-45 mins)
+  * title: Clear, encouraging lesson title
+  * description: Exactly 1 concise sentence (maximum 20 words) explaining what ${child.name} will learn or explore
+  * objectives: Exactly 2 concise bullet points representing core learning milestones
+- Connect to ${child.name}'s interests (${interests}) wherever natural.
+- Ensure all content is age-appropriate for ${child.yearGroup ?? "primary age"}.`;
 
   // ── Stream structured response via Vercel AI SDK ──────────────────────────
   const result = streamText({
     model: geminiModel,
+    system: systemInstruction,
+    prompt,
+    maxOutputTokens: 2048,
     output: Output.object({
       schema: weekGenerationSchema,
     }),
-    prompt,
     onEnd: async () => {
       try {
         const object = await result.output;

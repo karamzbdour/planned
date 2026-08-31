@@ -6,8 +6,13 @@ export const weekLessonSchema = z.object({
   topic: z.string(),
   durationMins: z.number().default(45),
   title: z.string(),
-  description: z.string(),
-  objectives: z.array(z.string()),
+  description: z
+    .string()
+    .describe("1 concise sentence summary explaining the session focus, max 20 words"),
+  objectives: z
+    .array(z.string())
+    .max(2)
+    .describe("Exactly 2 concise bullet points representing core learning milestones"),
 });
 
 export const weekGenerationSchema = z.object({

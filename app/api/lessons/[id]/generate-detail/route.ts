@@ -92,7 +92,7 @@ export async function POST(
   const faithIntegration = fp?.faithIntegration ?? false;
   const location = child.user.location ?? "United Kingdom";
 
-  const { prompt, includeFaith } = buildLessonPrompt({
+  const { systemPrompt, userPrompt, includeFaith } = buildLessonPrompt({
     childName: child.name,
     childAge: child.age,
     childYearGroup: child.yearGroup,
@@ -112,10 +112,11 @@ export async function POST(
 
   const result = streamText({
     model: geminiModel,
+    system: systemPrompt,
+    prompt: userPrompt,
     output: Output.object({
       schema: fullLessonSchema,
     }),
-    prompt,
     onEnd: async () => {
       try {
         const object = await result.output;
