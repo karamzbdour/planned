@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,11 @@ interface ObjectiveListProps {
 }
 
 export function ObjectiveList({ lessonId, objectives: initial }: ObjectiveListProps) {
-  const [objectives, setObjectives] = useState<Objective[]>(initial);
+  const [objectives, setObjectives] = useState<Objective[]>(initial || []);
+
+  useEffect(() => {
+    setObjectives(initial || []);
+  }, [initial]);
 
   const toggle = useCallback(
     async (objId: string, currentCompleted: boolean) => {

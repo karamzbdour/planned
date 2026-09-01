@@ -62,13 +62,26 @@ export async function GET(req: Request) {
     if (l.status === "IN_PROGRESS") subjectMap[l.subject].inProgress++;
   }
 
-  // Progress table — for objectivesMet and totalMinutes per subject
-  const progressBySubject: Record<string, { objectivesMet: number; totalMinutes: number }> = {};
+  // Progress table — for objectivesMet, totalMinutes, masteryLevel per subject
+  const progressBySubject: Record<
+    string,
+    {
+      objectivesMet: number;
+      totalMinutes: number;
+      masteryLevel?: string;
+      isManualOverride?: boolean;
+    }
+  > = {};
   for (const p of progressRows) {
-    progressBySubject[p.subject] = { objectivesMet: p.objectivesMet, totalMinutes: p.totalMinutes };
+    progressBySubject[p.subject] = {
+      objectivesMet: p.objectivesMet,
+      totalMinutes: p.totalMinutes,
+      masteryLevel: p.masteryLevel,
+      isManualOverride: p.isManualOverride,
+    };
   }
 
-  // Ability level mapping
+  // Ability level mapping fallback
   const abilityMap: Record<string, string> = {
     Mathematics: child.numeracyLevel,
     Maths: child.numeracyLevel,
@@ -76,7 +89,12 @@ export async function GET(req: Request) {
     Literacy: child.literacyLevel,
   };
   function getAbility(subject: string) {
-    return abilityMap[subject] ?? safeChild.reasoningLevel;
+    return (
+      progressBySubject[subject]?.masteryLevel ||
+      abilityMap[subject] ||
+      safeChild.reasoningLevel ||
+      "DEVELOPING"
+    );
   }
 
   const subjects = Object.entries(subjectMap).map(([subject, counts]) => ({
@@ -87,6 +105,7 @@ export async function GET(req: Request) {
     objectivesMet: progressBySubject[subject]?.objectivesMet ?? 0,
     totalMinutes: progressBySubject[subject]?.totalMinutes ?? 0,
     abilityLevel: getAbility(subject),
+    isManualOverride: progressBySubject[subject]?.isManualOverride ?? false,
   }));
 
   const totalLessons = allLessons.length;
@@ -94,8 +113,8 @@ export async function GET(req: Request) {
   const totalMinutes = progressRows.reduce((sum, p) => sum + p.totalMinutes, 0);
   const curriculumPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
-  // ── Recent activity (lessons + external) ─────────────────────────────────
-  const [completedLessonsFull, externalActivities] = await Promise.all([
+  // ── Recent activity (lessons + external + journal) ──────────────────────
+  const [completedLessonsFull, externalActivities, recentJournal] = await Promise.all([
     db.lesson.findMany({
       where: { childId, status: "COMPLETED" },
       orderBy: { completedAt: "desc" },
@@ -107,6 +126,11 @@ export async function GET(req: Request) {
     db.externalActivity.findMany({
       where: { childId },
       orderBy: { activityDate: "desc" },
+      take: 8,
+    }),
+    db.journalEntry.findMany({
+      where: { childId },
+      orderBy: { entryDate: "desc" },
       take: 8,
     }),
   ]);
@@ -122,6 +146,7 @@ export async function GET(req: Request) {
       objectivesTotal: l.objectives.length,
       durationMins: l.durationMins,
       isExternal: false,
+      isJournal: false,
     })),
     ...externalActivities.map((a) => ({
       id: a.id,
@@ -133,10 +158,27 @@ export async function GET(req: Request) {
       objectivesTotal: 0,
       durationMins: a.durationMins,
       isExternal: true,
+      isJournal: false,
+    })),
+    ...recentJournal.map((j) => ({
+      id: j.id,
+      type: "JOURNAL" as const,
+      subject: j.subject || "General",
+      title: j.title,
+      notes: j.notes,
+      moment: j.moment,
+      hasPhoto: j.hasPhoto,
+      photoUrl: j.photoUrl,
+      completedAt: j.entryDate.toISOString(),
+      objectivesDone: 0,
+      objectivesTotal: 0,
+      durationMins: ((j as unknown as { durationMins?: number | null }).durationMins) ?? 0,
+      isExternal: true,
+      isJournal: true,
     })),
   ]
     .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))
-    .slice(0, 8);
+    .slice(0, 10);
 
   const termInfo = getTermWeek(new Date());
 

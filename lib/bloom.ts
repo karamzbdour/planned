@@ -131,6 +131,30 @@ export const BADGE_DEFS: BadgeDef[] = [
     description: "Complete 50% of your lessons",
     emoji: "⭐",
   },
+  {
+    type: "JOURNAL_FIRST",
+    label: "First reflection",
+    description: "Record your first learning journal entry",
+    emoji: "📝",
+  },
+  {
+    type: "PHOTO_JOURNALIST",
+    label: "Visual storyteller",
+    description: "Attach photo evidence to 3 journal entries",
+    emoji: "📸",
+  },
+  {
+    type: "FIELD_EXPLORER",
+    label: "Field explorer",
+    description: "Record 3 Day Out journal entries",
+    emoji: "🧭",
+  },
+  {
+    type: "PROLIFIC_AUTHOR",
+    label: "Dedicated scribe",
+    description: "Record 10 journal entries",
+    emoji: "✍️",
+  },
 ];
 
 // ─── Badge checking ───────────────────────────────────────────────────────────
@@ -149,6 +173,9 @@ export async function checkAndAwardBadges(childId: string): Promise<string[]> {
     rsCount,
     externalCount,
     dayOutCount,
+    journalCount,
+    journalPhotoCount,
+    journalDayOutCount,
   ] = await Promise.all([
     db.child.findUnique({ where: { id: childId }, select: { id: true } }),
     db.badge.findMany({ where: { childId }, select: { badgeType: true } }),
@@ -161,6 +188,9 @@ export async function checkAndAwardBadges(childId: string): Promise<string[]> {
     db.lesson.count({ where: { childId, subject: "Religious Studies", status: "COMPLETED" } }),
     db.externalActivity.count({ where: { childId } }),
     db.externalActivity.count({ where: { childId, description: { contains: "day out" } } }),
+    db.journalEntry.count({ where: { childId } }),
+    db.journalEntry.count({ where: { childId, hasPhoto: true } }),
+    db.journalEntry.count({ where: { childId, moment: "DAY_OUT" } }),
   ]);
 
   if (!child) return [];
@@ -172,15 +202,19 @@ export async function checkAndAwardBadges(childId: string): Promise<string[]> {
     if (condition && !earned.has(type)) toAward.push(type);
   }
 
-  maybe("FIRST_STEP",     completedLessons >= 1);
-  maybe("SCIENCE_SPROUT", scienceCount >= 3);
-  maybe("WORD_WIZARD",    englishCount >= 5);
-  maybe("NUMBER_NINJA",   mathsCount >= 5);
-  maybe("ART_STAR",       artCount >= 3);
-  maybe("FAITH_SCHOLAR",  rsCount >= 3);
-  maybe("BOOK_LOVER",     externalCount >= 5);
-  maybe("DAY_TRIPPER",    dayOutCount >= 1);
-  maybe("HALF_WAY",       totalLessons > 0 && completedLessons / totalLessons >= 0.5);
+  maybe("FIRST_STEP",        completedLessons >= 1);
+  maybe("SCIENCE_SPROUT",    scienceCount >= 3);
+  maybe("WORD_WIZARD",       englishCount >= 5);
+  maybe("NUMBER_NINJA",      mathsCount >= 5);
+  maybe("ART_STAR",          artCount >= 3);
+  maybe("FAITH_SCHOLAR",     rsCount >= 3);
+  maybe("BOOK_LOVER",        externalCount >= 5);
+  maybe("DAY_TRIPPER",       dayOutCount >= 1 || journalDayOutCount >= 1);
+  maybe("HALF_WAY",          totalLessons > 0 && completedLessons / totalLessons >= 0.5);
+  maybe("JOURNAL_FIRST",     journalCount >= 1);
+  maybe("PHOTO_JOURNALIST",  journalPhotoCount >= 3);
+  maybe("FIELD_EXPLORER",    journalDayOutCount >= 3);
+  maybe("PROLIFIC_AUTHOR",   journalCount >= 10);
 
   // 5-day streak — check last 5 distinct calendar days with completedAt
   if (!earned.has("STREAK_5") && completedLessons >= 5) {

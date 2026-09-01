@@ -4,8 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useActiveChild } from "@/contexts/active-child";
 import { CircularProgress } from "@/components/progress/circular-progress";
-import { LogActivityModal } from "@/components/progress/log-activity-modal";
-import { Progress } from "@/components/ui/progress";
+import { AddEntryModal } from "@/components/journal/add-entry-modal";
 import {
   Loader2,
   Plus,
@@ -14,6 +13,12 @@ import {
   Clock,
   ChevronRight,
   ExternalLink,
+  Camera,
+  Sparkles,
+  MapPin,
+  Palette,
+  Star,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,18 +32,24 @@ interface SubjectRow {
   objectivesMet: number;
   totalMinutes: number;
   abilityLevel: string;
+  isManualOverride?: boolean;
 }
 
 interface ActivityItem {
   id: string;
-  type: "LESSON" | "EXTERNAL";
+  type: "LESSON" | "EXTERNAL" | "JOURNAL";
   subject: string;
   title: string;
+  notes?: string;
+  moment?: string;
+  hasPhoto?: boolean;
+  photoUrl?: string | null;
   completedAt: string | null;
   objectivesDone: number;
   objectivesTotal: number;
   durationMins: number;
   isExternal: boolean;
+  isJournal?: boolean;
 }
 
 interface ProgressData {
@@ -53,11 +64,6 @@ interface ProgressData {
   termInfo: { week: number; term: string; totalWeeks: number };
   subjects: SubjectRow[];
   recentActivity: ActivityItem[];
-}
-
-interface ObjectiveChip {
-  id: string;
-  text: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -179,7 +185,6 @@ export default function ProgressPage() {
   const [loading, setLoading] = useState(false);
   const [animate, setAnimate] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [objectives, setObjectives] = useState<ObjectiveChip[]>([]);
 
   const fetchData = useCallback(async (childId: string) => {
     setLoading(true);
@@ -189,12 +194,6 @@ export default function ProgressPage() {
       if (res.ok) {
         const json: ProgressData = await res.json();
         setData(json);
-        // Fetch objectives for log activity modal
-        const objRes = await fetch(`/api/lessons/objectives?childId=${childId}`).catch(() => null);
-        if (objRes?.ok) {
-          const objData = await objRes.json();
-          setObjectives(objData.objectives ?? []);
-        }
         // Trigger bar animations after data loads
         requestAnimationFrame(() => setTimeout(() => setAnimate(true), 50));
       }
@@ -220,10 +219,10 @@ export default function ProgressPage() {
 
   return (
     <>
-      {showModal && (
-        <LogActivityModal
+      {showModal && activeChild && (
+        <AddEntryModal
           childId={activeChild.id}
-          objectives={objectives}
+          childName={activeChild.name}
           onClose={() => setShowModal(false)}
           onSaved={() => fetchData(activeChild.id)}
         />
@@ -346,9 +345,43 @@ export default function ProgressPage() {
                       <p className="text-sm font-medium text-brand-green-deep truncate">
                         {item.title}
                       </p>
-                      {item.isExternal && (
+                      {item.isJournal ? (
+                        <Link
+                          href="/dashboard/journal"
+                          className={cn(
+                            "text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-1 hover:opacity-80 transition-opacity",
+                            item.moment === "DAY_OUT"
+                              ? "bg-green-100 text-green-700"
+                              : item.moment === "BREAKTHROUGH"
+                              ? "bg-amber-100 text-amber-700"
+                              : item.moment === "CREATIVE"
+                              ? "bg-pink-100 text-pink-700"
+                              : item.moment === "SPECIAL"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-emerald-50 text-brand-green-deep"
+                          )}
+                        >
+                          {item.moment === "DAY_OUT" ? (
+                            <MapPin className="w-2.5 h-2.5" />
+                          ) : item.moment === "BREAKTHROUGH" ? (
+                            <Sparkles className="w-2.5 h-2.5" />
+                          ) : item.moment === "CREATIVE" ? (
+                            <Palette className="w-2.5 h-2.5" />
+                          ) : item.moment === "SPECIAL" ? (
+                            <Star className="w-2.5 h-2.5" />
+                          ) : (
+                            <BookOpen className="w-2.5 h-2.5" />
+                          )}
+                          {item.moment === "DAY_OUT" ? "Day Out" : "Journal"}
+                        </Link>
+                      ) : item.isExternal ? (
                         <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-0.5">
                           <ExternalLink className="w-2.5 h-2.5" /> External
+                        </span>
+                      ) : null}
+                      {item.hasPhoto && (
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-full shrink-0 inline-flex items-center gap-0.5">
+                          <Camera className="w-2.5 h-2.5" /> Photo
                         </span>
                       )}
                     </div>

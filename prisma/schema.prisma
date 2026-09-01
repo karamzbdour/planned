@@ -150,9 +150,12 @@ model Lesson {
   dayDate      DateTime
   weekNumber   Int
   termNumber   Int
-  durationMins Int       @default(60)
-  startedAt    DateTime?
-  completedAt  DateTime?
+  durationMins     Int       @default(60)
+  activeSeconds    Int       @default(0)
+  isPaused         Boolean   @default(false)
+  lastActiveAt     DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
   // PENDING | IN_PROGRESS | COMPLETED | SKIPPED
   status           String   @default("PENDING")
   // JSON-encoded lesson plan returned by Claude
@@ -194,8 +197,9 @@ model JournalEntry {
   subject   String?
   // REGULAR | BREAKTHROUGH | DAY_OUT | CREATIVE | SPECIAL
   moment    String   @default("REGULAR")
-  hasPhoto  Boolean  @default(false)
-  photoUrl  String?
+  hasPhoto     Boolean  @default(false)
+  photoUrl     String?
+  durationMins Int?
   // JSON string array e.g. ["maths", "outdoor"]
   tags      String   @default("[]")
   entryDate DateTime
@@ -214,14 +218,18 @@ model JournalEntry {
 // ─── Progress ────────────────────────────────────────────────────────────────
 
 model Progress {
-  id              String   @id @default(cuid())
-  childId         String
-  subject         String
-  topicsCompleted Int      @default(0)
-  topicsTotal     Int      @default(0)
-  objectivesMet   Int      @default(0)
-  totalMinutes    Int      @default(0)
-  lastUpdated     DateTime @default(now()) @updatedAt
+  id               String    @id @default(cuid())
+  childId          String
+  subject          String
+  topicsCompleted  Int       @default(0)
+  topicsTotal      Int       @default(0)
+  objectivesMet    Int       @default(0)
+  totalMinutes     Int       @default(0)
+  // EMERGING | DEVELOPING | SECURE | EXCEEDING
+  masteryLevel     String    @default("DEVELOPING")
+  isManualOverride Boolean   @default(false)
+  lastLevelUpAt    DateTime?
+  lastUpdated      DateTime  @default(now()) @updatedAt
 
   child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
 

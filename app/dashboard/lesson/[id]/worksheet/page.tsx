@@ -14,6 +14,8 @@ import {
   Lock,
   Pencil,
 } from "lucide-react";
+import { useSetBreadcrumbTitle, useBreadcrumbs } from "@/contexts/breadcrumbs";
+import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import type { WorksheetContent, WorksheetQuestion } from "@/lib/worksheetGenerator";
 
 type Phase = "loading" | "empty" | "generating" | "ready" | "error" | "paywall";
@@ -28,6 +30,8 @@ interface ApiResponse {
 export default function WorksheetPage() {
   const params = useParams<{ id: string }>();
   const lessonId = params.id;
+  const { setBreadcrumbOverride } = useBreadcrumbs();
+  useSetBreadcrumbTitle("Worksheet", "worksheet");
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -47,13 +51,16 @@ export default function WorksheetPage() {
       if (!res.ok) throw new Error("Could not load worksheet");
       const json: ApiResponse = await res.json();
       setData(json);
+      if (json.lessonTitle) {
+        setBreadcrumbOverride(lessonId, json.lessonTitle);
+      }
       setAnswers(json.answers ?? {});
       setPhase(json.worksheet ? "ready" : "empty");
     } catch (err: unknown) {
       setPhase("error");
       setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
     }
-  }, [lessonId]);
+  }, [lessonId, setBreadcrumbOverride]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -219,14 +226,8 @@ export default function WorksheetPage() {
     <div className="max-w-2xl mx-auto px-5 py-6 space-y-5 print:max-w-full print:px-0 print:py-0">
       {/* Top bar — hidden when printing */}
       <div className="flex items-center justify-between gap-3 print:hidden">
-        <Link
-          href={`/dashboard/lesson/${lessonId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-brand-green transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to lesson
-        </Link>
-        <div className="flex items-center gap-2">
+        <Breadcrumbs className="py-0 flex-1 min-w-0" />
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={generate}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-green hover:text-brand-green-deep bg-brand-mint hover:bg-brand-mint/80 px-3 py-1.5 rounded-lg transition-colors"

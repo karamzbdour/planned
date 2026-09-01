@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { calculateMasteryLevel, MasteryTier } from "@/lib/mastery";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function GET(
   });
   if (!child) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const [lessons, progressRow, externalActivities] = await Promise.all([
+  const [lessons, progressRow, externalActivities, journalEntries] = await Promise.all([
     db.lesson.findMany({
       where: { childId, subject },
       include: { objectives: { orderBy: { id: "asc" } } },
@@ -37,6 +38,21 @@ export async function GET(
     db.externalActivity.findMany({
       where: { childId, subject },
       orderBy: { activityDate: "desc" },
+    }),
+    db.journalEntry.findMany({
+      where: {
+        childId,
+        OR: [
+          { subject: { equals: subject, mode: "insensitive" } },
+          ...(subject.toLowerCase() === "mathematics" || subject.toLowerCase() === "maths"
+            ? [{ subject: { in: ["Maths", "Mathematics", "maths", "mathematics"] } }]
+            : []),
+          ...(subject.toLowerCase() === "english" || subject.toLowerCase() === "literacy"
+            ? [{ subject: { in: ["English", "Literacy", "english", "literacy"] } }]
+            : []),
+        ],
+      },
+      orderBy: { entryDate: "desc" },
     }),
   ]);
 
@@ -56,12 +72,25 @@ export async function GET(
     }))
   );
 
-  const abilityLevel =
+  const fallbackAbilityLevel =
     subject === "Mathematics" || subject === "Maths"
       ? child.numeracyLevel
       : subject === "English" || subject === "Literacy"
       ? child.literacyLevel
       : child.reasoningLevel;
+
+  const currentMasteryLevel = (progressRow?.masteryLevel || fallbackAbilityLevel || "DEVELOPING") as MasteryTier;
+  const isManualOverride = progressRow?.isManualOverride ?? false;
+  const metObjectivesCount = allObjectives.filter((o) => o.completed).length;
+
+  const masteryCalculation = calculateMasteryLevel({
+    topicsCompleted: completed.length,
+    topicsTotal: lessons.length,
+    objectivesMet: metObjectivesCount,
+    totalObjectives: allObjectives.length,
+    currentLevel: currentMasteryLevel,
+    isManualOverride,
+  });
 
   return NextResponse.json({
     subject,
@@ -70,10 +99,13 @@ export async function GET(
       topicsCompleted: completed.length,
       topicsTotal: lessons.length,
       topicsInProgress: inProgress.length,
-      objectivesMet: progressRow?.objectivesMet ?? 0,
+      objectivesMet: metObjectivesCount,
       totalMinutes: progressRow?.totalMinutes ?? 0,
     },
-    abilityLevel,
+    abilityLevel: masteryCalculation.newLevel,
+    isManualOverride,
+    lastLevelUpAt: progressRow?.lastLevelUpAt?.toISOString() ?? null,
+    nextTierRequirements: masteryCalculation.nextTierRequirements,
     lessons: {
       completed: completed.map((l) => ({
         id: l.id,
@@ -92,6 +124,17 @@ export async function GET(
       description: a.description,
       durationMins: a.durationMins,
       activityDate: a.activityDate.toISOString(),
+    })),
+    journalEntries: journalEntries.map((j) => ({
+      id: j.id,
+      title: j.title,
+      notes: j.notes,
+      moment: j.moment,
+      hasPhoto: j.hasPhoto,
+      photoUrl: j.photoUrl,
+      durationMins: ((j as unknown as { durationMins?: number | null }).durationMins) ?? 0,
+      tags: JSON.parse(j.tags || "[]") as string[],
+      entryDate: j.entryDate.toISOString(),
     })),
   });
 }

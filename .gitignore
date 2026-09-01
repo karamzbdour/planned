@@ -45,3 +45,10 @@ next-env.d.ts
 prisma/*.db
 prisma/*.db-journal
 .env*.local
+
+# Uploads
+/public/uploads
+
+# Docs
+/.docs
+

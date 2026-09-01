@@ -60,3 +60,64 @@ export function getBloomLevel(points: number) {
   }
   return BLOOM_LEVELS.SEEDLING;
 }
+
+export interface VideoReference {
+  title?: string;
+  searchQuery?: string;
+  url?: string;
+  youtubeId?: string;
+  videoId?: string;
+}
+
+export function getYouTubeEmbedUrl(video: VideoReference | string): string {
+  if (typeof video === "string") {
+    video = { searchQuery: video };
+  }
+
+  const directId = video.youtubeId || video.videoId;
+  if (directId) {
+    return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(directId)}`;
+  }
+
+  const target = video.url || video.searchQuery || "";
+  if (!target) return "";
+
+  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+  const match = target.match(regExp);
+  if (match && match[1]) {
+    return `https://www.youtube-nocookie.com/embed/${match[1]}`;
+  }
+
+  if (/^[a-zA-Z0-9_-]{11}$/.test(target.trim())) {
+    return `https://www.youtube-nocookie.com/embed/${target.trim()}`;
+  }
+
+  return `https://www.youtube-nocookie.com/embed?listType=search&list=${encodeURIComponent(target.trim())}`;
+}
+
+export function getYouTubeWatchUrl(video: VideoReference | string): string {
+  if (typeof video === "string") {
+    video = { searchQuery: video };
+  }
+
+  const directId = video.youtubeId || video.videoId;
+  if (directId) {
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(directId)}`;
+  }
+
+  const target = video.url || video.searchQuery || "";
+  if (!target) return "https://www.youtube.com";
+
+  const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+  const match = target.match(regExp);
+  if (match && match[1]) {
+    return `https://www.youtube.com/watch?v=${match[1]}`;
+  }
+
+  if (/^[a-zA-Z0-9_-]{11}$/.test(target.trim())) {
+    return `https://www.youtube.com/watch?v=${target.trim()}`;
+  }
+
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(target.trim())}`;
+}
+

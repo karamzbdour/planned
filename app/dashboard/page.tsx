@@ -7,7 +7,9 @@ import { LessonListSkeleton } from "@/components/dashboard/lesson-card-skeleton"
 import { BloomBar } from "@/components/dashboard/bloom-bar";
 import { StatsRow } from "@/components/dashboard/stats-row";
 import { GenerateLessons } from "@/components/dashboard/generate-lessons";
-import { BookOpen, Loader2, Plus, CalendarDays, AlertTriangle, Clock, Sparkles } from "lucide-react";
+import { ActiveLessonBanner } from "@/components/dashboard/active-lesson-banner";
+import { AddEntryModal } from "@/components/journal/add-entry-modal";
+import { BookOpen, Loader2, Plus, CalendarDays, AlertTriangle, Clock, Sparkles, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -20,9 +22,28 @@ interface MissedLesson {
   topic: string;
   dayDate: string;
   status: string;
+  durationMins?: number;
+  activeSeconds?: number;
+  isPaused?: boolean;
   objectivesDone: number;
   objectivesTotal: number;
   parsedContent: { title?: string; description?: string };
+}
+
+interface DashboardLesson {
+  id: string;
+  subject: string;
+  topic: string;
+  status: string;
+  durationMins: number;
+  activeSeconds?: number;
+  isPaused?: boolean;
+  startedAt: string | null;
+  completedAt: string | null;
+  dayDate: string;
+  objectivesDone?: number;
+  objectivesTotal?: number;
+  parsedContent: { title?: string; description?: string; objectives?: string[] };
 }
 
 interface DashboardData {
@@ -41,17 +62,8 @@ interface DashboardData {
   } | null;
   range: DashboardRange;
   rangeLabel: string;
-  todaysLessons: {
-    id: string;
-    subject: string;
-    topic: string;
-    status: string;
-    durationMins: number;
-    startedAt: string | null;
-    completedAt: string | null;
-    dayDate: string;
-    parsedContent: { title?: string; description?: string; objectives?: string[] };
-  }[];
+  todaysLessons: DashboardLesson[];
+  activeLesson: DashboardLesson | null;
   missedLessons: MissedLesson[];
   stats: {
     lessonsDoneToday: number;
@@ -117,6 +129,7 @@ export default function DashboardPage() {
   // generation for the empty child. This button is always available.
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [showLogActivity, setShowLogActivity] = useState(false);
 
   const fetchData = useCallback(
     async (childId: string, rangeParam: DashboardRange, dateParam: string) => {
@@ -149,27 +162,10 @@ export default function DashboardPage() {
     fetchData(activeChild.id, range, customDate);
   }, [activeChild?.id, range, customDate, fetchData]);
 
-  async function handleGenerate() {
+  function handleGenerate() {
     if (!activeChild?.id || generating) return;
     setGenerating(true);
     setGenerateError("");
-    try {
-      const res = await fetch("/api/lessons/generate-week", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ childId: activeChild.id }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Generation failed");
-      }
-      // Refetch dashboard so the new lessons show up.
-      await fetchData(activeChild.id, range, customDate);
-    } catch (err: unknown) {
-      setGenerateError(err instanceof Error ? err.message : "Couldn't generate.");
-    } finally {
-      setGenerating(false);
-    }
   }
 
   // No children at all
@@ -208,7 +204,7 @@ export default function DashboardPage() {
   // Loading dashboard data — show skeleton
   if (loading || !data) {
     return (
-      <div className="px-5 py-6 max-w-2xl mx-auto space-y-6">
+      <div className="px-3 sm:px-5 py-4 sm:py-6 max-w-2xl mx-auto space-y-4 sm:space-y-6">
         {/* Top bar skeleton */}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
@@ -218,7 +214,7 @@ export default function DashboardPage() {
           <div className="animate-pulse h-7 w-20 bg-muted rounded-xl shrink-0" />
         </div>
         {/* Stats skeleton */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           {[0,1,2].map(i => (
             <div key={i} className="animate-pulse h-16 bg-muted rounded-2xl" />
           ))}
@@ -229,17 +225,32 @@ export default function DashboardPage() {
     );
   }
 
-  // No lessons yet — trigger generation
-  if (!data.hasAnyLessons) {
+  // No lessons yet or active generation triggered — stream generation canvas
+  if (!data.hasAnyLessons || generating) {
     return (
-      <div className="px-6 py-8 max-w-xl mx-auto">
+      <div className="px-4 sm:px-6 py-6 sm:py-8 max-w-xl mx-auto space-y-4">
+        {generating && data.hasAnyLessons && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setGenerating(false)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Cancel & back to dashboard
+            </Button>
+          </div>
+        )}
         <GenerateLessons
           childId={activeChild.id}
           childName={activeChild.name}
           faith={data.familyProfile?.faith}
           faithIntegration={data.familyProfile?.faithIntegration}
           location={data.familyProfile?.location ?? undefined}
-          onGenerated={() => fetchData(activeChild.id, range, customDate)}
+          onGenerated={() => {
+            setGenerating(false);
+            fetchData(activeChild.id, range, customDate);
+          }}
         />
       </div>
     );
@@ -260,50 +271,68 @@ export default function DashboardPage() {
   ].filter(Boolean);
 
   return (
-    <div className="px-5 py-6 max-w-2xl mx-auto space-y-6">
-      {/* Top bar */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-xl font-bold text-brand-green-deep leading-tight">
-            {greeting()}, {child.name}&apos;s day
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {data.stats.totalLessonsToday} lesson
-            {data.stats.totalLessonsToday !== 1 ? "s" : ""} {data.rangeLabel.toLowerCase()}
-            {metaParts.length > 0 && (
-              <> · {metaParts.join(" · ")}</>
-            )}
-          </p>
-        </div>
-        <div className="shrink-0 flex items-center gap-2">
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-            title="Generate this week's lessons for the active child"
-          >
-            {generating ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-            {generating ? "Generating…" : "Generate"}
-          </button>
-          <div className="flex items-center gap-1.5 bg-white border border-[hsl(var(--border))] rounded-xl px-3 py-1.5">
-            <CalendarDays className="w-3.5 h-3.5 text-brand-green" />
-            <span className="text-xs font-medium text-brand-green-deep">
-              {todayLabel()}
-            </span>
+    <>
+      {showLogActivity && activeChild && (
+        <AddEntryModal
+          childId={activeChild.id}
+          childName={activeChild.name}
+          onClose={() => setShowLogActivity(false)}
+          onSaved={() => fetchData(activeChild.id, range, customDate)}
+        />
+      )}
+
+      <div className="px-3.5 sm:px-5 py-4 sm:py-6 max-w-2xl mx-auto space-y-4 sm:space-y-6">
+        {/* Top bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="font-display text-lg sm:text-xl font-bold text-brand-green-deep leading-tight">
+              {greeting()}, {child.name}&apos;s parent
+            </h1>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+              {data.stats.totalLessonsToday} lesson
+              {data.stats.totalLessonsToday !== 1 ? "s" : ""} {data.rangeLabel.toLowerCase()}
+              {metaParts.length > 0 && (
+                <> · {metaParts.join(" · ")}</>
+              )}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <button
+              onClick={() => setShowLogActivity(true)}
+              className="inline-flex items-center gap-1.5 bg-brand-mint text-brand-green-deep border border-brand-green/30 hover:bg-brand-mint/80 text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded-xl transition-colors shadow-2xs"
+              title="Log real-world learning, trips, or hands-on activities"
+            >
+              <Compass className="w-3.5 h-3.5 text-brand-green shrink-0" />
+              <span>Log Activity</span>
+            </button>
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="inline-flex items-center gap-1.5 bg-brand-green hover:bg-brand-green-deep disabled:opacity-60 text-white text-xs font-semibold px-2.5 sm:px-3 py-1.5 rounded-xl transition-colors shadow-2xs"
+              title="Generate this week's lessons for the active child"
+            >
+              {generating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              <span>{generating ? "Generating…" : "Generate"}</span>
+            </button>
+            <div className="hidden xs:flex items-center gap-1.5 bg-white border border-[hsl(var(--border))] rounded-xl px-2.5 sm:px-3 py-1.5">
+              <CalendarDays className="w-3.5 h-3.5 text-brand-green" />
+              <span className="text-xs font-medium text-brand-green-deep">
+                {todayLabel()}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
       {generateError && (
-        <p className="text-xs text-destructive -mt-3">{generateError}</p>
+        <p className="text-xs text-destructive -mt-2">{generateError}</p>
       )}
 
       {/* Date range toggle — Today / Yesterday / This week / Last week + custom date */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="bg-white rounded-xl border border-[hsl(var(--border))] p-1 flex items-center gap-1 overflow-x-auto flex-1 min-w-0">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <div className="bg-white rounded-xl border border-[hsl(var(--border))] p-1 flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 min-w-0">
           {RANGE_OPTIONS.map((opt) => {
             const active = range === opt.id;
             return (
@@ -311,7 +340,7 @@ export default function DashboardPage() {
                 key={opt.id}
                 onClick={() => setRange(opt.id)}
                 className={cn(
-                  "flex-1 min-w-fit px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap",
+                  "flex-1 min-w-fit px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap text-center",
                   active
                     ? "bg-brand-green text-white shadow-sm"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -322,18 +351,20 @@ export default function DashboardPage() {
             );
           })}
         </div>
-        {/* Custom date picker — selecting a date flips range to "custom"
-            and re-runs fetch for that specific day. */}
+        {/* Custom date picker */}
         <label
           className={cn(
-            "shrink-0 inline-flex items-center gap-1.5 bg-white border rounded-xl px-3 py-1.5 cursor-pointer transition-colors",
+            "shrink-0 inline-flex items-center justify-between sm:justify-start gap-1.5 bg-white border rounded-xl px-3 py-1.5 cursor-pointer transition-colors text-xs",
             range === "custom"
-              ? "border-brand-green text-brand-green-deep"
+              ? "border-brand-green text-brand-green-deep ring-1 ring-brand-green/20"
               : "border-[hsl(var(--border))] text-muted-foreground hover:border-brand-green/40"
           )}
           title="Pick a specific date"
         >
-          <CalendarDays className="w-3.5 h-3.5 text-brand-green" />
+          <div className="flex items-center gap-1.5">
+            <CalendarDays className="w-3.5 h-3.5 text-brand-green" />
+            <span className="sm:hidden font-medium text-muted-foreground">Pick date:</span>
+          </div>
           <input
             type="date"
             value={customDate}
@@ -342,7 +373,7 @@ export default function DashboardPage() {
               setCustomDate(e.target.value);
               setRange("custom");
             }}
-            className="text-xs font-medium bg-transparent outline-none cursor-pointer w-[120px]"
+            className="text-xs font-medium bg-transparent outline-none cursor-pointer w-[115px]"
           />
         </label>
       </div>
@@ -354,6 +385,11 @@ export default function DashboardPage() {
         curriculumPercent={data.stats.curriculumPercent}
         bloomStars={data.stats.bloomStars}
       />
+
+      {/* Active in-progress lesson banner */}
+      {data.activeLesson && (
+        <ActiveLessonBanner lesson={data.activeLesson} />
+      )}
 
       {/* Lessons in the selected range. Week-level ranges (this-week,
           last-week) are broken into per-day groups; single-day ranges
@@ -470,6 +506,7 @@ export default function DashboardPage() {
         nextReward={data.nextReward}
       />
     </div>
+  </>
   );
 }
 

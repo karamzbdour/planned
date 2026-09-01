@@ -1,6 +1,10 @@
-import { ai, MODEL } from "@/lib/ai";
 import { db } from "@/lib/db";
+import { geminiModel } from "@/lib/ai/model";
+import { fullLessonSchema, type FullLessonData } from "@/lib/ai/schemas";
+import { generateText, Output } from "ai";
 import { fetchQuranVerse } from "@/lib/quranApi";
+import { enrichVideoResources } from "@/lib/youtube";
+import { getCurriculumSystemInstruction } from "@/lib/ai/curriculum-prompts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +26,8 @@ export interface Activity {
 export interface VideoResource {
   title: string;
   searchQuery: string;
+  youtubeId?: string;
+  url?: string;
 }
 
 export interface FaithConnection {
@@ -77,11 +83,7 @@ const FAITH_LABELS: Record<string, string> = {
   JUDAISM:      "Judaism",
 };
 
-/**
- * Returns curriculum-specific instructions that shape the tone, structure, and
- * content of the teaching guide and activities.
- */
-function curriculumApproachSection(curriculum: string, childName: string): string {
+export function curriculumApproachSection(curriculum: string, childName: string): string {
   if (curriculum === "MONTESSORI") {
     return `
 CURRICULUM APPROACH — MONTESSORI:
@@ -122,11 +124,9 @@ CURRICULUM APPROACH — BRITISH NATIONAL CURRICULUM:
 - The quiz tests recall and application at the appropriate year-group level.`;
 }
 
-// ─── Core generator ───────────────────────────────────────────────────────────
-
 export type RefineIntent = "easier" | "harder" | "alternative";
 
-function refineSection(intent: RefineIntent | undefined, childName: string): string {
+export function refineSection(intent: RefineIntent | undefined, childName: string): string {
   if (!intent) return "";
   if (intent === "easier") {
     return `
@@ -154,14 +154,162 @@ REFINEMENT — A DIFFERENT TAKE:
 - The teachingGuide steps and activities should look noticeably different from a typical lesson on this topic.`;
 }
 
+export interface BuildLessonPromptArgs {
+  childName: string;
+  childAge: number | null;
+  childYearGroup: string | null;
+  learningStyle: string | null;
+  interests: string;
+  literacyLevel?: string;
+  numeracyLevel?: string;
+  reasoningLevel?: string;
+  curriculum: string;
+  faith: string;
+  faithIntegration: boolean;
+  location: string;
+  subject: string;
+  topic: string;
+  tier: "FREE" | "BASIC" | "PREMIUM";
+  refineIntent?: RefineIntent;
+}
+
+export interface BuildLessonPromptResult {
+  systemPrompt: string;
+  userPrompt: string;
+  prompt: string;
+  includeFaith: boolean;
+  faith: string;
+}
+
+export function buildLessonPrompt(args: BuildLessonPromptArgs): BuildLessonPromptResult {
+  const {
+    childName,
+    childAge,
+    childYearGroup,
+    learningStyle,
+    interests,
+    literacyLevel = "age-appropriate",
+    numeracyLevel = "age-appropriate",
+    reasoningLevel = "age-appropriate",
+    curriculum,
+    faith,
+    faithIntegration,
+    location,
+    subject,
+    topic,
+    tier,
+    refineIntent,
+  } = args;
+
+  const includeFaith = faith !== "SECULAR" && faithIntegration;
+  const faithLabel = FAITH_LABELS[faith] ?? faith;
+  const curriculumLabel = CURRICULUM_LABELS[curriculum] ?? curriculum;
+  const quizCount = tier === "PREMIUM" ? 10 : 5;
+
+  // Invariant static system instruction for prompt caching
+  const systemPrompt = getCurriculumSystemInstruction(
+    curriculum,
+    faith,
+    faithIntegration
+  );
+
+  // Dynamic user prompt suffix
+  const userPrompt = `Create a detailed, engaging lesson for this child:
+
+CHILD PROFILE:
+- Name: ${childName}
+- Age: ${childAge ?? "primary school age"}
+- Year Group: ${childYearGroup ?? "primary"}
+- Curriculum: ${curriculumLabel}
+- Learning Style: ${learningStyle ?? "balanced"}
+- Interests: ${interests}
+- Literacy level: ${literacyLevel}
+- Numeracy level: ${numeracyLevel}
+- Reasoning level: ${reasoningLevel}
+
+LESSON FOCUS:
+- Subject: ${subject}
+- Topic: ${topic}
+
+FAMILY & LOCATION:
+- Faith context: ${includeFaith ? `${faithLabel} (weave in naturally)` : "secular — no religious content"}
+- Location: ${location}
+${refineSection(refineIntent, childName)}
+
+SPECIFIC OUTPUT REQUIREMENTS:
+- Generate ${quizCount} quiz questions progressing from recall to application.
+- Teaching instructions in teachingGuide should feel warm, encouraging, and practical for a parent in a home setting.
+- Connect to ${childName}'s interests (${interests}) where natural.
+- Include hands-on and creative activities tailored to the curriculum approach.
+${tier === "PREMIUM" ? `- Suggest a specific day-out venue near ${location}.` : ""}`.trim();
+
+  return {
+    systemPrompt,
+    userPrompt,
+    prompt: `${systemPrompt}\n\n${userPrompt}`,
+    includeFaith,
+    faith,
+  };
+}
+
+export async function postProcessLessonContent(
+  content: FullLessonData,
+  includeFaith: boolean,
+  faith: string
+): Promise<FullLessonContent> {
+  const result: FullLessonContent = {
+    title: content.title,
+    description: content.description,
+    objectives: content.objectives,
+    teachingGuide: content.teachingGuide,
+    activities: content.activities,
+    videoResources: content.videoResources,
+    faithConnection: content.faithConnection,
+    dayOut: content.dayOut,
+    quiz: content.quiz,
+  };
+
+  // ── Replace AI-generated Quran text with verified content ─────────────────
+  if (includeFaith && faith === "ISLAM" && result.faithConnection?.reference) {
+    try {
+      const real = await fetchQuranVerse(result.faithConnection.reference);
+      if (real) {
+        result.faithConnection = {
+          ...result.faithConnection,
+          arabicText: real.arabicText,
+          translation: real.translation,
+        };
+      } else {
+        console.warn(
+          `[lessonGenerator] Dropping unverified faithConnection for "${result.faithConnection.reference}"`
+        );
+        delete result.faithConnection;
+      }
+    } catch (e) {
+      console.warn("[lessonGenerator] Quran verification failed:", e);
+      delete result.faithConnection;
+    }
+  }
+
+  // ── Enrich YouTube video resources with verified video IDs ─────────────────
+  if (result.videoResources?.length) {
+    try {
+      result.videoResources = await enrichVideoResources(result.videoResources);
+    } catch (e) {
+      console.warn("[lessonGenerator] Failed to enrich video resources:", e);
+    }
+  }
+
+  return result;
+}
+
 export async function generateLesson(
   childId: string,
   subject: string,
   topic: string,
   tier: "FREE" | "BASIC" | "PREMIUM" = "FREE",
-  refineIntent?: RefineIntent,
+  refineIntent?: RefineIntent
 ): Promise<FullLessonContent> {
-  // Fetch child + user + family profile
   const child = await db.child.findUnique({
     where: { id: childId },
     include: {
@@ -185,211 +333,33 @@ export async function generateLesson(
   const faithIntegration = fp?.faithIntegration ?? false;
   const location = child.user.location ?? "United Kingdom";
 
-  // Location-based "day out" suggestions are a Premium-only feature, so only
-  // include them in the prompt if the caller told us this is a Premium user.
-  // (Caller passes `tier`; default to FREE so we never accidentally leak the
-  // section to a non-Premium user.)
-  const includeDayOut = tier === "PREMIUM";
+  const { systemPrompt, userPrompt, includeFaith } = buildLessonPrompt({
+    childName: child.name,
+    childAge: child.age,
+    childYearGroup: child.yearGroup,
+    learningStyle: child.learningStyle,
+    interests,
+    literacyLevel: child.literacyLevel,
+    numeracyLevel: child.numeracyLevel,
+    reasoningLevel: child.reasoningLevel,
+    curriculum,
+    faith,
+    faithIntegration,
+    location,
+    subject,
+    topic,
+    tier,
+    refineIntent,
+  });
 
-  // Quiz length scales with tier: 5 questions for FREE / BASIC, 10 for
-  // PREMIUM. Client asked for the bump after early users found 2 questions
-  // too shallow.
-  const quizCount = tier === "PREMIUM" ? 10 : 5;
+  const { output } = await generateText({
+    model: geminiModel,
+    system: systemPrompt,
+    prompt: userPrompt,
+    output: Output.object({
+      schema: fullLessonSchema,
+    }),
+  });
 
-  const includeFaith = faith !== "SECULAR" && faithIntegration;
-  const faithLabel = FAITH_LABELS[faith] ?? faith;
-  const curriculumLabel = CURRICULUM_LABELS[curriculum] ?? curriculum;
-  const approachSection = curriculumApproachSection(curriculum, child.name);
-
-  const faithReferenceFormat =
-    faith === "ISLAM"
-      ? `Format MUST be exact: Surah name + chapter:ayah, e.g. "Surah Al-Baqarah 2:286" or "Hadith — Sahih al-Bukhari 1:2". Never write a vague reference like "Quran" or "Quran 2" — always include the full Surah name and ayah number. If citing a Hadith, name the collection and number.`
-      : faith === "CHRISTIANITY"
-      ? `Format MUST be exact: Book chapter:verse, e.g. "Matthew 5:3" or "Proverbs 3:5-6". Never write a vague reference like "Bible" — always include the book, chapter, and verse number(s).`
-      : faith === "JUDAISM"
-      ? `Format MUST be exact: Book chapter:verse, e.g. "Genesis 1:1" or "Pirkei Avot 1:14". Never write a vague reference like "Torah" — always include the book, chapter, and verse number(s).`
-      : `Always include exact citation details (book, chapter, verse, or equivalent).`;
-
-  const faithBlock = includeFaith
-    ? `
-  "faithConnection": {
-    "reference": "A real, verifiable ${faithLabel} reference relevant to ${topic}. ${faithReferenceFormat}",
-    "arabicText": "Original Arabic/Hebrew text of the verse, exactly as in the source — empty string if not applicable",
-    "translation": "Faithful English translation of the verse",
-    "explanation": "2-3 sentences connecting this ${faithLabel} teaching naturally and gently to the lesson topic of ${topic}"
-  },`
-    : "";
-
-  const prompt = `You are an expert UK homeschool curriculum planner and lesson designer. Create a detailed, engaging lesson for a child to be taught at home by their parent.
-
-CHILD PROFILE:
-- Name: ${child.name}
-- Age: ${child.age ?? "primary school age"}
-- Year Group: ${child.yearGroup ?? "primary"}
-- Curriculum: ${curriculumLabel}
-- Learning Style: ${child.learningStyle ?? "balanced"}
-- Interests: ${interests}
-- Literacy level: ${child.literacyLevel ?? "age-appropriate"}
-- Numeracy level: ${child.numeracyLevel ?? "age-appropriate"}
-- Reasoning level: ${child.reasoningLevel ?? "age-appropriate"}
-
-LESSON:
-- Subject: ${subject}
-- Topic: ${topic}
-
-FAMILY:
-- Faith: ${includeFaith ? `${faithLabel} (weave in naturally)` : "secular — no religious content"}
-- Location: ${location}
-${approachSection}${refineSection(refineIntent, child.name)}
-
-Return ONLY valid JSON — no markdown, no code fences, just the raw JSON object:
-{
-  "title": "Engaging, specific lesson title for this topic",
-  "description": "2-3 sentences that paint a vivid picture of what ${child.name} will do and discover today.",
-  "objectives": [
-    "By the end of this lesson, ${child.name} will be able to [measurable outcome 1]",
-    "By the end of this lesson, ${child.name} will be able to [measurable outcome 2]",
-    "By the end of this lesson, ${child.name} will be able to [measurable outcome 3]",
-    "By the end of this lesson, ${child.name} will be able to [measurable outcome 4]"
-  ],
-  "teachingGuide": [
-    {
-      "step": 1,
-      "title": "Warm Up (5 min)",
-      "instructions": "Detailed instructions for the parent — exactly what to say, ask, and do. Include suggested questions and expected responses. 4-5 sentences."
-    },
-    {
-      "step": 2,
-      "title": "Introduce the Concept (10 min)",
-      "instructions": "Explain the core idea step by step. What to show, demonstrate, or explain. Include a real-world analogy. 4-5 sentences."
-    },
-    {
-      "step": 3,
-      "title": "Guided Practice (15 min)",
-      "instructions": "Walk through the main activity together. What to do, watch for, and how to support ${child.name}. 4-5 sentences."
-    },
-    {
-      "step": 4,
-      "title": "Wrap Up & Reflect (5 min)",
-      "instructions": "How to consolidate learning. Suggested questions to check understanding. How to celebrate what ${child.name} achieved. 4-5 sentences."
-    }
-  ],
-  "activities": [
-    {
-      "title": "Activity name",
-      "type": "Hands-on",
-      "description": "Clear, step-by-step instructions for the activity. What materials are needed. What ${child.name} should produce. 3-4 sentences.",
-      "durationMins": 15
-    },
-    {
-      "title": "Activity name",
-      "type": "Drawing",
-      "description": "Clear instructions. What to draw, label, or create. How it connects to the lesson. 3-4 sentences.",
-      "durationMins": 10
-    }
-  ],
-  "videoResources": [
-    {
-      "title": "Descriptive title so parent knows what the video covers",
-      "searchQuery": "specific YouTube search query to find the best video"
-    },
-    {
-      "title": "Second video title",
-      "searchQuery": "second YouTube search query"
-    }
-  ],${faithBlock}${
-    includeDayOut
-      ? `
-  "dayOut": {
-    "venueName": "Specific named venue near ${location} — museum, science centre, nature reserve, historic site, etc.",
-    "description": "2-3 sentences explaining why this venue brings the lesson topic to life and what ${child.name} will experience there.",
-    "address": "Full UK address including postcode"
-  },`
-      : ""
-  }
-  "quiz": [
-    {
-      "question": "Specific question testing understanding of ${topic}",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctIndex": 0
-    },
-    {
-      "question": "Another question at an appropriate level for ${child.yearGroup ?? "this year group"}",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctIndex": 2
-    }
-    // ...continue until ${quizCount} questions total
-  ]
-}
-
-Rules:
-- The "quiz" array MUST contain exactly ${quizCount} questions — do not produce fewer or more. The first two are example shapes; you must add ${quizCount - 2} more questions of the same shape.
-- Questions should progress from easier recall ("what is…") to applied / multi-step understanding so the quiz feels graduated, not repetitive.
-- Activity type MUST be exactly one of: Drawing, Worksheet, Hands-on, Discussion
-- correctIndex is 0-based (0 = first option)
-- All content must be age-appropriate for ${child.yearGroup ?? "primary school"}
-- Teaching instructions should feel warm, encouraging, and practical for a home setting
-- Connect to ${child.name}'s interests (${interests}) where natural
-- Follow the CURRICULUM APPROACH section above — do not default to a BNC-style lesson if the curriculum is Montessori or Unschooling`;
-
-  // ── Call Claude ─────────────────────────────────────────────────────────
-  let message;
-  try {
-    message = await ai.messages.create({
-      model: MODEL,
-      max_tokens: 4096,
-      messages: [{ role: "user", content: prompt }],
-    });
-  } catch (err: unknown) {
-    const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Anthropic API error: ${detail}`);
-  }
-
-  const text =
-    message.content[0].type === "text" ? message.content[0].text : "";
-
-  // Strip any markdown code fences if Claude added them
-  const stripped = text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
-  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error("[lessonGenerator] No JSON in response:", text.slice(0, 300));
-    throw new Error("AI returned an unexpected response — please try again");
-  }
-
-  let parsed: FullLessonContent;
-  try {
-    parsed = JSON.parse(jsonMatch[0]) as FullLessonContent;
-  } catch {
-    throw new Error("AI response could not be parsed — please try again");
-  }
-
-  // ── Replace AI-generated Quran text with verified content ─────────────────
-  // Gemini/Claude sometimes hallucinate Arabic and translations that don't
-  // match the cited verse. For Islamic faith integration, trust the AI for
-  // *which* verse to cite but always replace the Arabic + English with the
-  // real verse from Quran.com's public API. If the API call fails for any
-  // reason we drop the faithConnection rather than ship fabricated text.
-  if (includeFaith && faith === "ISLAM" && parsed.faithConnection?.reference) {
-    const real = await fetchQuranVerse(parsed.faithConnection.reference);
-    if (real) {
-      parsed.faithConnection = {
-        ...parsed.faithConnection,
-        arabicText: real.arabicText,
-        translation: real.translation,
-      };
-    } else {
-      // Couldn't verify — better to omit than risk fabricated scripture.
-      console.warn(
-        `[lessonGenerator] Dropping unverified faithConnection for "${parsed.faithConnection.reference}"`,
-      );
-      delete parsed.faithConnection;
-    }
-  }
-
-  return parsed;
+  return postProcessLessonContent(output, includeFaith, faith);
 }
