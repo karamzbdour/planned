@@ -9,8 +9,10 @@ import {
   Loader2,
   Lock,
   Sparkles,
+  Square,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
 
 interface Message {
   id: string;
@@ -38,9 +40,11 @@ export function LessonChat({ lessonId }: LessonChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Lazy-load the conversation the first time the panel opens.
   const loadHistory = useCallback(async () => {
@@ -63,48 +67,91 @@ export function LessonChat({ lessonId }: LessonChatProps) {
   }, [open, historyLoaded, loadHistory]);
 
   useEffect(() => {
-    if (open) scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, sending, open]);
+    if (open) scrollRef.current?.scrollIntoView({ behavior: isStreaming ? "auto" : "smooth" });
+  }, [messages, isStreaming, open]);
 
   async function send(content: string) {
     const trimmed = content.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || isStreaming) return;
 
-    setSending(true);
+    setIsStreaming(true);
     setErrorMsg("");
     setInput("");
 
-    const tempId = `tmp-${Date.now()}`;
-    setMessages((prev) => [...prev, { id: tempId, role: "user", content: trimmed }]);
+    const tempUserId = `tmp-user-${Date.now()}`;
+    const tempAssistantId = `tmp-asst-${Date.now()}`;
+    setStreamingMessageId(tempAssistantId);
+
+    setMessages((prev) => [
+      ...prev,
+      { id: tempUserId, role: "user", content: trimmed },
+      { id: tempAssistantId, role: "assistant", content: "" },
+    ]);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: trimmed, lessonId }),
+        signal: abortController.signal,
       });
+
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         if (res.status === 403) {
           setPaywall(true);
-          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          setMessages((prev) =>
+            prev.filter((m) => m.id !== tempUserId && m.id !== tempAssistantId)
+          );
           return;
         }
+        const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? "Couldn't send");
       }
-      const json = await res.json();
+
+      if (!res.body) {
+        throw new Error("No response stream");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempAssistantId ? { ...m, content: accumulated } : m
+          )
+        );
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
       setMessages((prev) =>
-        prev
-          .filter((m) => m.id !== tempId)
-          .concat([json.userMessage, json.assistantMessage]),
+        prev.filter((m) => !(m.id === tempAssistantId && !m.content.trim()))
       );
-    } catch (err: unknown) {
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setErrorMsg(err instanceof Error ? err.message : "Couldn't send");
       setInput(trimmed);
     } finally {
-      setSending(false);
+      setIsStreaming(false);
+      setStreamingMessageId(null);
+      abortControllerRef.current = null;
     }
+  }
+
+  function stopGeneration() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    setStreamingMessageId(null);
   }
 
   return (
@@ -202,32 +249,39 @@ export function LessonChat({ lessonId }: LessonChatProps) {
                   ))}
                 </div>
               ) : (
-                messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={cn(
-                      "flex",
-                      m.role === "user" ? "justify-end" : "justify-start",
-                    )}
-                  >
+                messages.map((m) => {
+                  const isUser = m.role === "user";
+                  const isMessageStreaming = isStreaming && m.id === streamingMessageId;
+
+                  return (
                     <div
+                      key={m.id}
                       className={cn(
-                        "max-w-[88%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
-                        m.role === "user"
-                          ? "bg-brand-green text-white rounded-br-sm"
-                          : "bg-muted/50 text-brand-green-deep rounded-bl-sm",
+                        "flex",
+                        isUser ? "justify-end" : "justify-start"
                       )}
                     >
-                      {m.content}
+                      <div
+                        className={cn(
+                          "max-w-[88%] px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-2xs",
+                          isUser
+                            ? "bg-brand-green text-white rounded-br-sm whitespace-pre-wrap"
+                            : "bg-muted/40 border border-[hsl(var(--border))] text-brand-green-deep rounded-bl-sm"
+                        )}
+                      >
+                        {isUser ? (
+                          m.content
+                        ) : (
+                          <MarkdownRenderer
+                            content={m.content}
+                            isStreaming={isMessageStreaming}
+                            className="text-xs sm:text-sm"
+                          />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
-              {sending && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Thinking…
-                </div>
+                  );
+                })
               )}
               <div ref={scrollRef} />
             </div>
@@ -260,20 +314,27 @@ export function LessonChat({ lessonId }: LessonChatProps) {
                   placeholder="Ask about this lesson…"
                   rows={1}
                   maxLength={4000}
-                  disabled={sending}
                   className="flex-1 bg-muted/30 border border-[hsl(var(--border))] rounded-xl px-3 py-2 text-sm placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green resize-none max-h-32"
                 />
-                <button
-                  type="submit"
-                  disabled={sending || !input.trim()}
-                  className="shrink-0 w-9 h-9 rounded-xl bg-brand-green hover:bg-brand-green-deep disabled:opacity-50 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors"
-                >
-                  {sending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={stopGeneration}
+                    className="shrink-0 w-9 h-9 rounded-xl bg-destructive hover:bg-destructive/90 text-white flex items-center justify-center transition-colors shadow-2xs animate-pulse"
+                    title="Stop generation"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-white" />
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!input.trim()}
+                    className="shrink-0 w-9 h-9 rounded-xl bg-brand-green hover:bg-brand-green-deep disabled:opacity-40 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors shadow-2xs"
+                    title="Send"
+                  >
                     <Send className="w-3.5 h-3.5" />
-                  )}
-                </button>
+                  </button>
+                )}
               </form>
             )}
           </div>

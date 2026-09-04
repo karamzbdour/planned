@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ai, MODEL } from "@/lib/ai";
+import { toTextStream, createTextStreamResponse } from "ai";
+import { streamWithFallback } from "@/lib/ai/fallback";
 import { getUserTier } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
 
@@ -97,7 +98,7 @@ CURRENT LESSON THE PARENT IS LOOKING AT (treat questions as being about THIS les
 ${args.lesson.objectives.map((o) => `    • ${o}`).join("\n")}`
     : "";
 
-  return `You are a friendly, expert UK homeschool teaching assistant. You're helping a parent who is homeschooling their child(ren).
+  return `You are a friendly, expert UK homeschool teaching assistant helping a busy homeschool parent.
 
 PARENT'S CONTEXT:
 - Curriculum approach: ${curriculumLabel[args.curriculum] ?? args.curriculum}
@@ -105,21 +106,12 @@ PARENT'S CONTEXT:
 - Children:
 ${childrenSummary}${lessonBlock}
 
-The parent might ask you to:
-- Explain a concept in different ways
-- Suggest alternative activities when materials aren't available
-- Adapt a lesson for their specific child's interests
-- Clarify something the lesson said
-- Give pedagogical or behavioural advice
-- Answer general homeschooling questions
-
-Keep responses:
-- Warm and encouraging — homeschooling is demanding
-- Practical — concrete suggestions over theory
-- Concise — 2-4 short paragraphs unless they explicitly want more detail
-- UK-flavoured — use British terms (Year groups, KS1/KS2, GCSEs, etc.)
-
-Never invent scripture or named research. If you don't know, say so plainly.`;
+RESPONSE GUIDELINES:
+- **Strictly concise & punchy**: Homeschooling parents are often reading while teaching. Get straight to the point in 1–2 short paragraphs or 3–4 bullet points maximum, unless the parent explicitly asks for an in-depth breakdown.
+- **No filler or pleasantries**: Never include conversational preamble ("Certainly!", "Great question!", "Homeschooling can be challenging...") or closing sign-offs ("Hope this helps!", "Let me know if you need anything else!"). Begin immediately with the answer.
+- **Actionable over theoretical**: Provide practical steps, hands-on examples, or direct analogies rather than general background theory.
+- **UK terminology**: Use British educational terms naturally (Year groups, KS1/KS2, Maths, primary/secondary).
+- **Honesty**: Never invent scripture, hadith, or citations. If uncertain, state so plainly in one sentence.`;
 }
 
 async function getOrCreateConversation(userId: string) {
@@ -267,55 +259,53 @@ export async function POST(req: Request) {
   // system role. Keep last 30 turns to bound tokens.
   const history = conversation.messages.slice(-30);
   const messages = [
-    { role: "user", content: `${sysPrompt}\n\nThe parent's first message follows.` },
-    { role: "assistant", content: "Understood — I'm here to help. What can I clarify or suggest?" },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-    { role: "user", content: userContent },
+    ...history.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user" as const, content: userContent },
   ];
 
-  let assistantContent: string;
   try {
-    const response = await ai.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
+    const { result } = await streamWithFallback({
+      feature: "parent-chat",
+      system: sysPrompt,
       messages,
+      onEnd: async (event) => {
+        try {
+          const assistantContent = event.text.trim();
+          if (assistantContent) {
+            await db.chatMessage.create({
+              data: {
+                conversationId: conversation.id,
+                role: "assistant",
+                content: assistantContent,
+              },
+            });
+            await db.conversation.update({
+              where: { id: conversation.id },
+              data: { updatedAt: new Date() },
+            });
+          }
+        } catch (dbErr) {
+          console.error("[chat onEnd error]", dbErr);
+        }
+      },
     });
-    assistantContent =
-      response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
-    if (!assistantContent) throw new Error("Empty response from AI");
+
+    return createTextStreamResponse({
+      stream: toTextStream({ stream: result.stream }),
+      headers: {
+        "X-User-Message-Id": userMessage.id,
+        "X-Conversation-Id": conversation.id,
+      },
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "AI request failed";
     console.error("[chat]", msg);
-    // Don't delete the user message — the parent can see what they asked and
-    // retry. Just surface the failure.
+    // Don't delete the user message — the parent can see what they asked and retry.
     return NextResponse.json({ error: msg }, { status: 502 });
   }
-
-  const assistantMessage = await db.chatMessage.create({
-    data: { conversationId: conversation.id, role: "assistant", content: assistantContent },
-  });
-
-  // Bump conversation.updatedAt so it sorts to top in any future "recent
-  // conversations" listing.
-  await db.conversation.update({
-    where: { id: conversation.id },
-    data: { updatedAt: new Date() },
-  });
-
-  return NextResponse.json({
-    userMessage: {
-      id: userMessage.id,
-      role: userMessage.role,
-      content: userMessage.content,
-      createdAt: userMessage.createdAt.toISOString(),
-    },
-    assistantMessage: {
-      id: assistantMessage.id,
-      role: assistantMessage.role,
-      content: assistantMessage.content,
-      createdAt: assistantMessage.createdAt.toISOString(),
-    },
-  });
 }
 
 /**

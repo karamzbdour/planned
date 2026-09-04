@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { ai, MODEL } from "@/lib/ai";
+import { generateWithFallback } from "@/lib/ai/fallback";
 
 export const dynamic = "force-dynamic";
 
@@ -136,14 +136,12 @@ Respond ONLY with a valid JSON object formatted as:
 }`;
 
   try {
-    const message = await ai.messages.create({
-      model: MODEL,
-      max_tokens: 350,
-      messages: [{ role: "user", content: prompt }],
+    const message = await generateWithFallback({
+      feature: "progress-note",
+      prompt,
     });
 
-    const rawText =
-      message.content[0]?.type === "text" ? message.content[0].text.trim() : "";
+    const rawText = message.text.trim();
 
     let strength = "";
     let growth = "";
