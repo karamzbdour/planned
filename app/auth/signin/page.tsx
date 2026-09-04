@@ -4,7 +4,8 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarCheck, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -40,14 +41,12 @@ export default function SignInPage() {
       <div className="w-full max-w-sm">
 
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4">
-            <CalendarCheck className="w-7 h-7 text-white" strokeWidth={1.75} />
-          </div>
-          <h1 className="font-display text-2xl font-bold text-brand-green-deep">
+        <div className="flex flex-col items-center mb-8 text-center">
+          <BrandLogo size="xl" showWordmark={false} className="mb-4" />
+          <h1 className="font-display text-3xl font-bold text-brand-green-deep">
             Welcome back
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1.5">
             Sign in to continue planning
           </p>
         </div>

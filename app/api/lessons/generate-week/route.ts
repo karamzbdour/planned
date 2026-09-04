@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { streamText, Output, toTextStream, createTextStreamResponse } from "ai";
-import { geminiModel } from "@/lib/ai/model";
-import { weekGenerationSchema } from "@/lib/ai/schemas";
+import { toTextStream, createTextStreamResponse } from "ai";
+import { streamWithFallback } from "@/lib/ai/fallback";
+import { weekGenerationSchema, type WeekLessonData } from "@/lib/ai/schemas";
 import { getUserTier, freeWeekLimitReached, PAYWALL_RESPONSES } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
 import { getWeekGenSystemInstruction } from "@/lib/ai/curriculum-prompts";
@@ -130,15 +130,12 @@ CONTENT RIGHT-SIZING CONSTRAINTS:
 - Connect to ${child.name}'s interests (${interests}) wherever natural.
 - Ensure all content is age-appropriate for ${child.yearGroup ?? "primary age"}.`;
 
-  // ── Stream structured response via Vercel AI SDK ──────────────────────────
-  const result = streamText({
-    model: geminiModel,
+  // ── Stream structured response via Multi-Model Router ────────────────────
+  const { result } = await streamWithFallback({
+    feature: "week-generation",
     system: systemInstruction,
     prompt,
-    maxOutputTokens: 2048,
-    output: Output.object({
-      schema: weekGenerationSchema,
-    }),
+    schema: weekGenerationSchema,
     onEnd: async () => {
       try {
         const object = await result.output;
@@ -154,7 +151,7 @@ CONTENT RIGHT-SIZING CONSTRAINTS:
           });
 
           await db.$transaction(
-            object.lessons.map((lesson) => {
+            object.lessons.map((lesson: WeekLessonData) => {
               const lessonDate = new Date(monday);
               lessonDate.setDate(monday.getDate() + Math.min(Math.max(lesson.dayOffset ?? 0, 0), 4));
               lessonDate.setHours(9, 0, 0, 0);

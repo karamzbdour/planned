@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
-import { geminiModel } from "@/lib/ai/model";
 import { fullLessonSchema, type FullLessonData } from "@/lib/ai/schemas";
-import { generateText, Output } from "ai";
+import { generateWithFallback } from "@/lib/ai/fallback";
 import { fetchQuranVerse } from "@/lib/quranApi";
 import { enrichVideoResources } from "@/lib/youtube";
 import { getCurriculumSystemInstruction } from "@/lib/ai/curriculum-prompts";
@@ -352,14 +351,16 @@ export async function generateLesson(
     refineIntent,
   });
 
-  const { output } = await generateText({
-    model: geminiModel,
+  const { output } = await generateWithFallback<FullLessonData>({
+    feature: "lesson-generate",
     system: systemPrompt,
     prompt: userPrompt,
-    output: Output.object({
-      schema: fullLessonSchema,
-    }),
+    schema: fullLessonSchema,
   });
+
+  if (!output) {
+    throw new Error("Lesson generation failed to produce valid structured content");
+  }
 
   return postProcessLessonContent(output, includeFaith, faith);
 }

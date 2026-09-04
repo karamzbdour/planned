@@ -4,13 +4,13 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  CalendarCheck,
   ChevronLeft,
   Loader2,
   Check,
   Star,
   Zap,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { AgeCarousel } from "@/components/onboarding/age-carousel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -130,8 +130,8 @@ function ChildOnboardingSkeleton() {
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="flex flex-col items-center mb-2">
-          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4">
-            <CalendarCheck className="w-6 h-6 text-white" strokeWidth={1.75} />
+          <div className="mb-4">
+            <BrandLogo size="lg" showWordmark={false} />
           </div>
           <div className="h-3.5 w-28 bg-muted animate-pulse rounded-full mb-1" />
           <div className="h-3 w-36 bg-muted/50 animate-pulse rounded-full mt-1" />
@@ -365,8 +365,8 @@ function OnboardingChildContent() {
 
         {/* Header */}
         <div className="flex flex-col items-center mb-2">
-          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4" aria-hidden="true">
-            <CalendarCheck className="w-6 h-6 text-white" strokeWidth={1.75} />
+          <div className="mb-4" aria-hidden="true">
+            <BrandLogo size="lg" showWordmark={false} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-widest text-brand-green mb-1">
             {STEP_LABELS[step - 1]}

@@ -11,6 +11,7 @@
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateWithFallback } from "@/lib/ai/fallback";
 
 let _client: GoogleGenerativeAI | null = null;
 function getClient(): GoogleGenerativeAI {
@@ -111,16 +112,13 @@ Please generate a structured lesson plan in JSON format with these fields:
 
 Keep the language warm, encouraging, and appropriate for home education. Activities should be hands-on where possible.`;
 
-  const message = await ai.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    messages: [{ role: "user", content: prompt }],
+  const message = await generateWithFallback({
+    feature: "lesson-generate",
+    prompt,
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response type");
-
-  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  const text = message.text || "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON found in response");
 
   return JSON.parse(jsonMatch[0]);
@@ -199,16 +197,13 @@ Please respond in valid JSON format only with the following structure:
   "learningSummary": "A concise 1-2 sentence affirming summary of what the child achieved."
 }`;
 
-  const message = await ai.messages.create({
-    model: MODEL,
-    max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
+  const message = await generateWithFallback({
+    feature: "journal-analysis",
+    prompt,
   });
 
-  const content = message.content[0];
-  if (content.type !== "text") throw new Error("Unexpected response type");
-
-  const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+  const text = message.text || "";
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON found in response");
 
   return JSON.parse(jsonMatch[0]);

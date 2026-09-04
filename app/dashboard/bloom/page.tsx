@@ -48,12 +48,18 @@ function GardenSVG({ elements, name }: { elements: GardenEl[]; name: string }) {
       className="w-full rounded-2xl"
       aria-label={`${name}'s garden`}
     >
+      <defs>
+        <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#E2F0EC" />
+          <stop offset="100%" stopColor="#F5F9F6" />
+        </linearGradient>
+      </defs>
       {/* Sky */}
-      <rect width="360" height="160" fill="#E6F1FB" />
+      <rect width="360" height="160" fill="url(#skyGrad)" />
       {/* Grass strip */}
-      <rect y="155" width="360" height="45" fill="#EAF3DE" />
+      <rect y="155" width="360" height="45" fill="#DEEFE4" />
       {/* Horizon hill */}
-      <ellipse cx="180" cy="158" rx="220" ry="20" fill="#D4EBBB" />
+      <ellipse cx="180" cy="158" rx="220" ry="20" fill="#BEDDC9" />
 
       {/* ── Sun (50 stars) ── */}
       <g style={{ opacity: unlocked("sun") ? 1 : 0, transition: "opacity 1s" }}>
@@ -208,16 +214,17 @@ function GardenSVG({ elements, name }: { elements: GardenEl[]; name: string }) {
 
 function StarCounter({ stars }: { stars: number }) {
   return (
-    <div className="relative inline-flex items-center justify-center w-28 h-28">
+    <div className="relative inline-flex items-center justify-center w-28 h-28 shrink-0">
+      <div className="absolute inset-0 rounded-full bg-gradient-to-b from-[#FDF6E7] to-[#F5E5C6] shadow-sm ring-1 ring-[#C98A2C]/30 border border-[#E8CE98]" />
       <svg viewBox="0 0 120 120" className="absolute inset-0 w-full h-full" aria-hidden>
-        <circle cx="60" cy="60" r="52" fill="#FEF9C3" stroke="#FCD34D" strokeWidth="4" />
+        <circle cx="60" cy="60" r="50" fill="none" stroke="#C98A2C" strokeWidth="1.5" strokeDasharray="3 3.5" opacity="0.5" />
       </svg>
-      <div className="relative flex flex-col items-center">
-        <Star className="w-7 h-7 text-amber-400 fill-amber-400" />
-        <span className="font-display font-bold text-2xl text-amber-700 leading-none mt-0.5">
+      <div className="relative flex flex-col items-center z-10">
+        <Star className="w-6 h-6 text-[#C98A2C] fill-[#C98A2C] drop-shadow-2xs" />
+        <span className="font-serif font-bold text-3xl text-[#182848] leading-none mt-1">
           {stars}
         </span>
-        <span className="text-[11px] text-amber-600 font-medium">stars</span>
+        <span className="text-[10px] text-[#8C5D14] font-semibold tracking-wider uppercase mt-0.5">stars</span>
       </div>
     </div>
   );
@@ -233,13 +240,13 @@ function NewElementBanner({
   onDismiss: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-      <span className="text-sm font-medium text-amber-800">✨ {message}</span>
+    <div className="flex items-center justify-between gap-3 bg-[#FDF9F0] border border-[#EED9B8] rounded-2xl px-4 py-3 shadow-2xs">
+      <span className="text-sm font-serif font-medium text-[#7B4E12]">✨ {message}</span>
       <button
         onClick={onDismiss}
-        className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-amber-100 transition-colors shrink-0"
+        className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#FAF3E8] transition-colors shrink-0"
       >
-        <X className="w-3.5 h-3.5 text-amber-600" />
+        <X className="w-3.5 h-3.5 text-[#8A5E1E]" />
       </button>
     </div>
   );
@@ -305,7 +312,7 @@ export default function BloomPage() {
     <div className="px-5 py-6 max-w-2xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="font-display text-xl font-bold text-brand-green-deep">
+        <h1 className="font-serif text-2xl font-bold text-brand-green-deep tracking-tight">
           Bloom 🌱
         </h1>
         <Link
@@ -323,27 +330,27 @@ export default function BloomPage() {
       )}
 
       {/* Hero: star counter + level */}
-      <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-6 flex items-center gap-5">
+      <div className="bg-white rounded-3xl border border-[#EAE3D2] px-5 py-6 flex items-center gap-5 shadow-2xs">
         <StarCounter stars={stars} />
-        <div className="flex-1">
-          <p className="text-sm text-muted-foreground font-medium">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-[#546477] font-medium uppercase tracking-wider">
             Keep going, {child.name}!
           </p>
           <div className="mt-1 flex items-center gap-2 flex-wrap">
-            <span className="text-lg">{level.emoji}</span>
-            <span className="font-display font-bold text-brand-green-deep text-lg">
+            <span className="text-xl">{level.emoji}</span>
+            <span className="font-serif font-bold text-brand-green-deep text-lg sm:text-xl">
               {level.label}
             </span>
           </div>
           {nextLevel && (
-            <div className="mt-3 space-y-1">
-              <div className="flex justify-between text-xs text-muted-foreground">
+            <div className="mt-3 space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground font-medium">
                 <span>{nextLevel.label} at {nextLevel.minStars} ⭐</span>
-                <span>{Math.max(nextLevel.minStars - stars, 0)} to go</span>
+                <span className="font-semibold text-[#8C5D14]">{Math.max(nextLevel.minStars - stars, 0)} to go</span>
               </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-2 bg-[#F2EDE2] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-amber-400 rounded-full transition-all duration-700 ease-out"
+                  className="h-full bg-gradient-to-r from-[#E5B25D] to-[#C98A2C] rounded-full transition-all duration-700 ease-out"
                   style={{
                     width: `${Math.min(
                       ((stars - level.minStars) /
@@ -366,7 +373,7 @@ export default function BloomPage() {
             <Lock className="w-5 h-5 text-brand-green" />
           </div>
           <div className="space-y-1">
-            <p className="font-display font-bold text-brand-green-deep">
+            <p className="font-serif font-bold text-lg text-brand-green-deep">
               Unlock {child.name}&apos;s Bloom garden
             </p>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
@@ -377,7 +384,7 @@ export default function BloomPage() {
           </div>
           <Link
             href="/pricing"
-            className="inline-flex items-center gap-2 bg-brand-green hover:bg-brand-green-deep text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"
+            className="inline-flex items-center gap-2 bg-brand-green hover:bg-brand-green-deep text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors shadow-2xs"
           >
             <Sparkles className="w-4 h-4" />
             Upgrade to Basic
@@ -385,13 +392,13 @@ export default function BloomPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          <h2 className="font-display font-semibold text-brand-green-deep">
+          <h2 className="font-serif font-bold text-lg text-brand-green-deep">
             {child.name}&apos;s garden
           </h2>
-          <div className="rounded-2xl overflow-hidden border border-[hsl(var(--border))]">
+          <div className="rounded-2xl overflow-hidden border border-[#EAE3D2] shadow-2xs">
             <GardenSVG elements={gardenElements} name={child.name} />
           </div>
-          <p className="text-xs text-center text-muted-foreground">
+          <p className="text-xs text-center text-[#546477] font-medium">
             More garden elements unlock as you earn stars ✨
           </p>
         </div>
@@ -400,38 +407,38 @@ export default function BloomPage() {
       {/* Reward goals — only for Basic+ */}
       {!gardenLocked && activeRewards.length > 0 && (
         <div className="space-y-2">
-          <h2 className="font-display font-semibold text-brand-green-deep">
+          <h2 className="font-serif font-bold text-lg text-brand-green-deep">
             Reward goals
           </h2>
-          <div className="bg-white rounded-2xl border border-[hsl(var(--border))] divide-y divide-[hsl(var(--border))]">
+          <div className="bg-white rounded-2xl border border-[#EAE3D2] divide-y divide-[#EAE3D2] shadow-2xs overflow-hidden">
             {activeRewards.map((r) => (
               <div key={r.id} className="px-4 py-3.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm text-brand-green-deep truncate">
+                  <span className="font-medium text-sm text-[#182848] truncate">
                     {r.name}
                   </span>
                   {r.ready ? (
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-green text-white shrink-0">
+                    <span className="text-xs font-serif font-bold px-2.5 py-0.5 rounded-full bg-[#2B5F75] text-white shrink-0 shadow-2xs">
                       Ready to claim! 🎉
                     </span>
                   ) : (
-                    <span className="text-xs text-muted-foreground shrink-0">
+                    <span className="text-xs text-[#546477] font-medium shrink-0">
                       {r.starsRemaining} ⭐ to go
                     </span>
                   )}
                 </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div className="h-2 bg-[#F2EDE2] rounded-full overflow-hidden">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-700 ease-out",
-                      r.ready ? "bg-brand-green" : "bg-amber-400"
+                      r.ready ? "bg-[#2B5F75]" : "bg-gradient-to-r from-[#E5B25D] to-[#C98A2C]"
                     )}
                     style={{
                       width: `${Math.min((stars / r.starsRequired) * 100, 100)}%`,
                     }}
                   />
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex justify-between text-[11px] text-muted-foreground font-medium">
                   <span>{stars} stars</span>
                   <span>{r.starsRequired} stars needed</span>
                 </div>
@@ -443,15 +450,15 @@ export default function BloomPage() {
 
       {/* No rewards yet nudge — only for Basic+ */}
       {!gardenLocked && activeRewards.length === 0 && (
-        <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-6 text-center">
+        <div className="bg-white rounded-2xl border border-[#EAE3D2] px-5 py-6 text-center shadow-2xs">
           <p className="text-2xl mb-2">🎁</p>
-          <p className="font-semibold text-brand-green-deep text-sm">No reward goals yet</p>
+          <p className="font-serif font-bold text-brand-green-deep text-base">No reward goals yet</p>
           <p className="text-xs text-muted-foreground mt-1 mb-3">
             Set a reward goal to motivate {child.name}!
           </p>
           <Link
             href="/dashboard/bloom/settings"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2 rounded-xl transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2 rounded-xl transition-colors shadow-2xs"
           >
             Add a reward
           </Link>
@@ -461,7 +468,7 @@ export default function BloomPage() {
       {/* Badges — only for Basic+ */}
       {!gardenLocked && (
       <div className="space-y-2">
-        <h2 className="font-display font-semibold text-brand-green-deep">
+        <h2 className="font-serif font-bold text-lg text-brand-green-deep">
           Badges
         </h2>
         <div className="grid grid-cols-3 gap-2.5">
@@ -469,14 +476,16 @@ export default function BloomPage() {
           {earnedBadges.map((b) => (
             <div
               key={b.type}
-              className="bg-white rounded-2xl border border-[hsl(var(--border))] p-3 flex flex-col items-center gap-1 text-center"
+              className="bg-gradient-to-b from-white to-[#FDFBF7] rounded-2xl border border-[#EAE3D2] p-3.5 flex flex-col items-center gap-1 text-center shadow-2xs hover:shadow-xs transition-all relative ring-1 ring-[#C98A2C]/25"
             >
-              <span className="text-3xl">{b.emoji}</span>
-              <span className="text-xs font-semibold text-brand-green-deep leading-tight">
+              <div className="w-11 h-11 rounded-full bg-[#FDF6E7] border border-[#E9CE98] flex items-center justify-center text-2xl shadow-inner mb-0.5">
+                {b.emoji}
+              </div>
+              <span className="font-serif font-bold text-xs text-[#182848] leading-tight">
                 {b.label}
               </span>
               {b.earnedAt && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[10px] text-[#546477] font-medium">
                   {new Date(b.earnedAt).toLocaleDateString("en-GB", {
                     day: "numeric",
                     month: "short",
@@ -490,13 +499,15 @@ export default function BloomPage() {
           {lockedBadges.map((b) => (
             <div
               key={b.type}
-              className="bg-muted/40 rounded-2xl border border-[hsl(var(--border))] p-3 flex flex-col items-center gap-1 text-center"
+              className="bg-[#FAF6ED]/60 rounded-2xl border border-dashed border-[#EAE3D2] p-3.5 flex flex-col items-center gap-1 text-center opacity-65"
             >
-              <span className="text-3xl grayscale opacity-40">{b.emoji}</span>
-              <span className="text-xs font-semibold text-muted-foreground leading-tight">
+              <div className="w-11 h-11 rounded-full bg-muted/40 flex items-center justify-center text-2xl grayscale opacity-40 mb-0.5">
+                {b.emoji}
+              </div>
+              <span className="font-medium text-xs text-muted-foreground leading-tight">
                 {b.label}
               </span>
-              <span className="text-[10px] text-muted-foreground leading-tight">
+              <span className="text-[10px] text-muted-foreground/80 leading-tight">
                 {b.description}
               </span>
             </div>

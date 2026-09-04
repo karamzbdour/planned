@@ -11,11 +11,20 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          green: "#1D9E75",
-          "green-deep": "#085041",
-          mint: "#E1F5EE",
-          amber: "#FAEEDA",
-          "off-white": "#F1EFE8",
+          navy: "#182848",
+          steel: "#2B5F75",
+          vellum: "#FAF6ED",
+          brass: "#C98A2C",
+          oxblood: "#8B3A3A",
+          mist: "#EFF4F6",
+          // Mappings for existing component references
+          green: "#2B5F75",
+          "green-deep": "#182848",
+          mint: "#EFF4F6",
+          amber: "#FBF5E8",
+          "off-white": "#FAF6ED",
+          gold: "#C98A2C",
+          terracotta: "#8B3A3A",
         },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
@@ -57,8 +66,9 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
-        display: ["var(--font-plus-jakarta)", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "var(--font-plus-jakarta)", "var(--font-inter)", "system-ui", "sans-serif"],
+        display: ["var(--font-fraunces)", "var(--font-serif)", "Georgia", "serif"],
+        serif: ["var(--font-fraunces)", "var(--font-serif)", "Georgia", "serif"],
       },
       keyframes: {
         "accordion-down": {

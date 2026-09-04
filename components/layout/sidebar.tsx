@@ -8,13 +8,13 @@ import {
   Flower2,
   BookOpen,
   Settings,
-  CalendarCheck,
   ChevronDown,
   Zap,
   X,
   Plus,
   MessageCircle,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { cn } from "@/lib/utils";
 import { useActiveChild } from "@/contexts/active-child";
 import { Button } from "@/components/ui/button";
@@ -44,22 +44,10 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
   const { allChildren, activeChild, setActiveChildId } = useActiveChild();
 
   return (
-    <aside className="flex flex-col w-64 h-full bg-white border-r border-[hsl(var(--border))]">
+    <aside className="flex flex-col w-64 h-full bg-[#FCFAF6] border-r border-border/70 shadow-2xs">
       {/* Brand */}
-      <div className="h-16 flex items-center justify-between px-5 border-b border-[hsl(var(--border))] shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl planned-gradient flex items-center justify-center shadow-sm">
-            <CalendarCheck className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="font-display font-bold text-brand-green-deep leading-none">
-              Planned
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              You teach. We plan.
-            </p>
-          </div>
-        </div>
+      <div className="h-16 flex items-center justify-between px-5 border-b border-border/60 shrink-0 bg-white/60">
+        <BrandLogo size="md" subtitle="You teach. We plan." />
         {onClose && (
           <Button
             variant="ghost"
@@ -74,25 +62,25 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
 
       {/* Child switcher */}
       {allChildren.length > 0 && (
-        <div className="px-3 py-3 border-b border-[hsl(var(--border))] shrink-0">
+        <div className="px-3 py-3 border-b border-border/60 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-brand-mint hover:bg-brand-mint/80 transition-colors text-left">
-                <div className="w-8 h-8 rounded-lg bg-brand-green flex items-center justify-center text-white font-display font-bold text-sm shrink-0">
+              <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-white hover:bg-brand-mint/40 border border-border/70 shadow-2xs transition-all text-left group">
+                <div className="w-8 h-8 rounded-lg planned-gradient flex items-center justify-center text-white font-serif font-bold text-sm shrink-0 shadow-2xs">
                   {activeChild?.name?.[0]?.toUpperCase() ?? "?"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-brand-green-deep truncate">
+                  <p className="text-sm font-semibold text-brand-green-deep truncate group-hover:text-brand-green transition-colors">
                     {activeChild?.name ?? "Select child"}
                   </p>
-                  <p className="text-xs text-brand-green-deep/60">
+                  <p className="text-xs text-muted-foreground">
                     {activeChild?.yearGroup ?? `Age ${activeChild?.age ?? "—"}`}
                   </p>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-brand-green-deep/60 shrink-0" />
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:text-brand-green-deep transition-colors shrink-0" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="start">
+            <DropdownMenuContent className="w-56 shadow-md border-border/80" align="start">
               {allChildren.map((child) => (
                 <DropdownMenuItem
                   key={child.id}
@@ -101,9 +89,9 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
                 >
                   <div
                     className={cn(
-                      "w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+                      "w-7 h-7 rounded-lg flex items-center justify-center font-serif font-bold text-xs shrink-0",
                       child.id === activeChild?.id
-                        ? "bg-brand-green text-white"
+                        ? "planned-gradient text-white shadow-2xs"
                         : "bg-muted text-foreground"
                     )}
                   >
@@ -135,7 +123,7 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active =
             href === "/dashboard"
@@ -147,16 +135,16 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
               href={href}
               onClick={onClose}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
                 active
-                  ? "bg-brand-mint text-brand-green-deep"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-brand-mint/90 text-brand-green-deep font-semibold shadow-2xs border border-brand-green/15"
+                  : "text-muted-foreground hover:bg-white/80 hover:text-brand-green-deep"
               )}
             >
               <Icon
                 className={cn(
-                  "w-4 h-4 shrink-0",
-                  active ? "text-brand-green" : "text-muted-foreground"
+                  "w-4 h-4 shrink-0 transition-colors",
+                  active ? "text-brand-green" : "text-muted-foreground/70"
                 )}
               />
               {label}
@@ -166,23 +154,23 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
       </nav>
 
       {/* Bottom: upgrade + settings */}
-      <div className="p-3 space-y-2 border-t border-[hsl(var(--border))] shrink-0">
+      <div className="p-3 space-y-2 border-t border-border/60 shrink-0 bg-white/40">
         {subscriptionTier === "FREE" && (
-          <div className="rounded-xl bg-gradient-to-br from-brand-green-deep to-brand-green p-3.5 text-white">
+          <div className="rounded-xl planned-gradient p-3.5 text-white shadow-xs ring-1 ring-white/15">
             <div className="flex items-center gap-1.5 mb-1">
-              <Zap className="w-3.5 h-3.5 text-yellow-300" />
-              <p className="text-[10px] font-bold uppercase tracking-wider">
+              <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200">
                 Upgrade to Premium
               </p>
             </div>
-            <p className="text-xs text-white/75 mb-2.5 leading-relaxed">
+            <p className="text-xs text-white/80 mb-2.5 leading-relaxed">
               Unlock AI lesson generation, unlimited children &amp; progress
               reports.
             </p>
             <Link
               href="/pricing"
               onClick={onClose}
-              className="block w-full text-center bg-white text-brand-green-deep text-xs font-bold py-1.5 rounded-lg hover:bg-brand-mint transition-colors"
+              className="block w-full text-center bg-white text-brand-green-deep text-xs font-bold py-1.5 rounded-lg hover:bg-brand-mint transition-colors shadow-2xs"
             >
               See plans →
             </Link>
@@ -194,8 +182,8 @@ export function Sidebar({ subscriptionTier, onClose }: SidebarProps) {
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
             pathname.startsWith("/dashboard/settings")
-              ? "bg-brand-mint text-brand-green-deep"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              ? "bg-brand-mint text-brand-green-deep font-semibold border border-brand-green/15"
+              : "text-muted-foreground hover:bg-white/80 hover:text-brand-green-deep"
           )}
         >
           <Settings className="w-4 h-4 shrink-0" />

@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { streamText, Output, toTextStream, createTextStreamResponse } from "ai";
-import { geminiModel } from "@/lib/ai/model";
-import { fullLessonSchema } from "@/lib/ai/schemas";
+import { toTextStream, createTextStreamResponse } from "ai";
+import { streamWithFallback } from "@/lib/ai/fallback";
+import { fullLessonSchema, type FullLessonData } from "@/lib/ai/schemas";
 import {
   buildLessonPrompt,
   postProcessLessonContent,
@@ -110,19 +110,17 @@ export async function POST(
     tier,
   });
 
-  const result = streamText({
-    model: geminiModel,
+  const { result } = await streamWithFallback({
+    feature: "lesson-detail",
     system: systemPrompt,
     prompt: userPrompt,
-    output: Output.object({
-      schema: fullLessonSchema,
-    }),
+    schema: fullLessonSchema,
     onEnd: async () => {
       try {
         const object = await result.output;
         if (object) {
           const processed = await postProcessLessonContent(
-            object,
+            object as FullLessonData,
             includeFaith,
             faith
           );

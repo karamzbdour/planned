@@ -110,9 +110,9 @@ export function ActiveLessonBanner({ lesson }: ActiveLessonBannerProps) {
             href={`/dashboard/lesson/${lesson.id}`}
             className="inline-flex items-center justify-center gap-2 bg-brand-green hover:bg-brand-green-deep text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-all shadow-sm hover:shadow group w-full sm:w-auto"
           >
-            <Play className="w-4 h-4 fill-current transition-transform group-hover:scale-110" />
+            <Play className="w-4 h-4 fill-current" />
             Resume lesson
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

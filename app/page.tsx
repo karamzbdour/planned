@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  CalendarCheck,
   Sparkles,
   MapPin,
   BookOpen,
@@ -13,6 +12,7 @@ import {
   Clock,
   Users,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 
@@ -20,12 +20,7 @@ function Nav() {
   return (
     <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-[hsl(var(--border))]">
       <div className="max-w-5xl mx-auto px-5 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl planned-gradient flex items-center justify-center shadow-sm">
-            <CalendarCheck className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-display font-bold text-brand-green-deep">Planned</span>
-        </div>
+        <BrandLogo size="md" href="/" />
         <div className="flex items-center gap-3">
           <Link
             href="/pricing"
@@ -55,38 +50,38 @@ function Nav() {
 
 const FEATURES = [
   {
-    icon: <Sparkles className="w-6 h-6" />,
-    color: "bg-violet-100 text-violet-600",
+    icon: <Sparkles className="w-5 h-5" />,
+    color: "bg-[#F4EFF8] text-[#4E2B6F] border border-[#DDCFEA]",
     title: "AI lesson plans in seconds",
     body: "Planned generates a full week of personalised lessons — teaching guide, activities, quiz, and a YouTube resource link — tailored to your child's year group and interests.",
   },
   {
-    icon: <MapPin className="w-6 h-6" />,
-    color: "bg-teal-100 text-teal-600",
+    icon: <MapPin className="w-5 h-5" />,
+    color: "bg-[#EFF6F6] text-[#1B5760] border border-[#C7E3E5]",
     title: "Local day outs included",
     body: "Every lesson plan can include a suggested day out near you — museums, nature spots, historical sites — matched to the topic you're teaching.",
   },
   {
-    icon: <TrendingUp className="w-6 h-6" />,
-    color: "bg-blue-100 text-blue-600",
+    icon: <TrendingUp className="w-5 h-5" />,
+    color: "bg-[#F0F5F9] text-[#1C4E75] border border-[#CDE0EE]",
     title: "Progress tracking that works",
     body: "Track topics completed, objectives met, and time spent per subject. Clear visual bars show exactly where each child is in the year's curriculum.",
   },
   {
-    icon: <Flower2 className="w-6 h-6" />,
-    color: "bg-amber-100 text-amber-600",
+    icon: <Flower2 className="w-5 h-5" />,
+    color: "bg-brand-amber text-amber-900 border border-amber-300/50",
     title: "Bloom reward garden",
     body: "Children earn stars for completed lessons. A growing garden SVG unlocks new elements — flowers, trees, butterflies — as milestones are hit. Badges celebrate achievements.",
   },
   {
-    icon: <BookOpen className="w-6 h-6" />,
-    color: "bg-pink-100 text-pink-600",
+    icon: <BookOpen className="w-5 h-5" />,
+    color: "bg-[#F8F1F5] text-[#6B2856] border border-[#E7CFDF]",
     title: "Scrapbook journal",
     body: "Log day trips, breakthroughs, and creative moments with photos, tags, and notes. Timeline view groups entries by week. Export a print-ready PDF keepsake.",
   },
   {
-    icon: <Shield className="w-6 h-6" />,
-    color: "bg-indigo-100 text-indigo-600",
+    icon: <Shield className="w-5 h-5" />,
+    color: "bg-[#EEF6F1] text-[#1F5C38] border border-[#C8E5D2]",
     title: "Faith-aware curriculum",
     body: "Choose to weave Islamic, Christian, or Jewish connections naturally into lessons — through stories, references, and Arabic text — or keep everything secular.",
   },
@@ -100,21 +95,21 @@ const TESTIMONIALS = [
     name: "Sarah M.",
     detail: "Homeschooling mum of two, Manchester",
     avatar: "S",
-    color: "bg-violet-500",
+    color: "bg-[#1C4E75]",
   },
   {
     quote: "The Bloom garden is what sold my kids on it. My 8-year-old checks every morning to see if a new flower has appeared in her garden!",
     name: "Ibrahim K.",
     detail: "Home educator, Birmingham",
     avatar: "I",
-    color: "bg-teal-500",
+    color: "bg-[#1F5C38]",
   },
   {
     quote: "Having faith connections built into the Science lessons is exactly what we needed. It just flows naturally — no awkward add-ons.",
     name: "Fatima R.",
     detail: "Islamic homeschool, London",
     avatar: "F",
-    color: "bg-amber-500",
+    color: "bg-[#7B4E12]",
   },
 ];
 
@@ -130,13 +125,13 @@ const PLANS_PREVIEW = [
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#F7FAF7]">
+    <div className="min-h-screen bg-[#FAF6ED]">
       <Nav />
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <section className="max-w-5xl mx-auto px-5 pt-16 pb-20 text-center">
         {/* Eyebrow */}
-        <div className="inline-flex items-center gap-2 bg-brand-mint border border-brand-green/20 text-brand-green-deep text-xs font-semibold px-4 py-1.5 rounded-full mb-6">
+        <div className="inline-flex items-center gap-2 bg-brand-mint border border-brand-green/20 text-brand-green-deep text-xs font-semibold px-4 py-1.5 rounded-full mb-6 shadow-2xs">
           <Sparkles className="w-3.5 h-3.5 text-brand-green" />
           AI-powered home education planning for UK families
         </div>
@@ -147,7 +142,7 @@ export default function HomePage() {
           <span className="text-brand-green">done for you</span>
         </h1>
 
-        <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
+        <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed font-sans">
           Planned generates personalised lesson plans, tracks your child&apos;s progress,
           rewards their learning with a growing garden, and keeps memories in a beautiful journal.
           All you do is teach.
@@ -157,21 +152,21 @@ export default function HomePage() {
         <div className="flex flex-col sm:flex-row gap-3 justify-center mb-12">
           <Link
             href="/onboarding"
-            className="inline-flex items-center justify-center gap-2 bg-brand-green hover:bg-brand-green-deep text-white font-semibold text-base px-8 py-4 rounded-2xl shadow-md transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-brand-green hover:bg-brand-green-deep text-white font-semibold text-base px-8 py-4 rounded-2xl shadow-sm hover:shadow-md transition-all active:scale-[0.99]"
           >
             Get started — it&apos;s free
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
             href="/pricing"
-            className="inline-flex items-center justify-center gap-2 bg-white border border-[hsl(var(--border))] hover:border-brand-green/30 text-brand-green-deep font-semibold text-base px-8 py-4 rounded-2xl transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-white border border-border/80 hover:border-brand-green/30 text-brand-green-deep font-semibold text-base px-8 py-4 rounded-2xl shadow-2xs hover:bg-brand-mint/30 transition-all"
           >
             See pricing
           </Link>
         </div>
 
         {/* Trust bar */}
-        <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground font-sans">
           {[
             { icon: <Clock className="w-4 h-4" />, text: "Set up in 5 minutes" },
             { icon: <Users className="w-4 h-4" />, text: "Built for UK curriculum" },
@@ -200,25 +195,26 @@ export default function HomePage() {
           {FEATURES.map((f) => (
             <div
               key={f.title}
-              className="bg-white rounded-2xl border border-[hsl(var(--border))] p-6 space-y-3 hover:shadow-md hover:border-brand-green/20 transition-all"
+              className="bg-white rounded-2xl border border-border/70 p-6 space-y-3 hover:shadow-md hover:border-brand-green/30 transition-[border-color,box-shadow] duration-150 shadow-2xs"
             >
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${f.color}`}>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${f.color} shadow-2xs`}>
                 {f.icon}
               </div>
-              <h3 className="font-display font-semibold text-brand-green-deep">{f.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{f.body}</p>
+              <h3 className="font-display font-bold text-lg text-brand-green-deep">{f.title}</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed font-sans">{f.body}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* ── How it works ─────────────────────────────────────────────────── */}
-      <section className="bg-white border-y border-[hsl(var(--border))] py-16">
+      <section className="bg-white border-y border-border/70 py-16">
         <div className="max-w-3xl mx-auto px-5">
           <div className="text-center mb-10">
-            <h2 className="font-display text-3xl font-bold text-brand-green-deep mb-3">
+            <h2 className="font-display text-3xl sm:text-4xl font-bold text-brand-green-deep mb-3">
               Up and running in minutes
             </h2>
+            <p className="text-muted-foreground">From initial sign up to teaching your first lesson.</p>
           </div>
           <div className="space-y-6">
             {[
@@ -228,12 +224,12 @@ export default function HomePage() {
               { step: "4", title: "Celebrate and reflect", body: "Bloom stars and garden elements reward every lesson. Journal your memories. Export a PDF keepsake at the end of term." },
             ].map((item) => (
               <div key={item.step} className="flex gap-5">
-                <div className="w-10 h-10 rounded-xl bg-brand-mint text-brand-green-deep font-display font-bold flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-brand-mint text-brand-green-deep border border-brand-green/20 font-serif font-bold text-base flex items-center justify-center shrink-0 shadow-2xs">
                   {item.step}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-brand-green-deep mb-1">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground">{item.body}</p>
+                  <h3 className="font-semibold text-brand-green-deep mb-1 text-base">{item.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{item.body}</p>
                 </div>
               </div>
             ))}
@@ -244,7 +240,7 @@ export default function HomePage() {
       {/* ── Testimonials ─────────────────────────────────────────────────── */}
       <section className="max-w-5xl mx-auto px-5 py-16">
         <div className="text-center mb-10">
-          <h2 className="font-display text-3xl font-bold text-brand-green-deep mb-3">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold text-brand-green-deep mb-3">
             Loved by home educators
           </h2>
           <p className="text-muted-foreground">What families are saying about Planned</p>
@@ -254,18 +250,18 @@ export default function HomePage() {
           {TESTIMONIALS.map((t) => (
             <div
               key={t.name}
-              className="bg-white rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4"
+              className="bg-white rounded-2xl border border-border/70 p-6 space-y-4 shadow-2xs hover:shadow-md transition-all"
             >
-              <div className="flex gap-0.5">
+              <div className="flex gap-1">
                 {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <Star key={i} className="w-4 h-4 text-amber-500 fill-amber-400" />
                 ))}
               </div>
-              <p className="text-sm text-brand-green-deep/80 leading-relaxed italic">
+              <p className="text-sm text-brand-green-deep/90 leading-relaxed italic font-serif">
                 &ldquo;{t.quote}&rdquo;
               </p>
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full ${t.color} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
+                <div className={`w-9 h-9 rounded-full ${t.color} flex items-center justify-center text-white font-serif font-bold text-sm shrink-0 shadow-2xs`}>
                   {t.avatar}
                 </div>
                 <div>
@@ -279,10 +275,10 @@ export default function HomePage() {
       </section>
 
       {/* ── Pricing preview ───────────────────────────────────────────────── */}
-      <section className="bg-white border-y border-[hsl(var(--border))] py-16">
+      <section className="bg-[#FAF8F4] border-y border-border/70 py-16">
         <div className="max-w-3xl mx-auto px-5">
           <div className="text-center mb-10">
-            <h2 className="font-display text-3xl font-bold text-brand-green-deep mb-3">
+            <h2 className="font-display text-3xl sm:text-4xl font-bold text-brand-green-deep mb-3">
               Simple, honest pricing
             </h2>
             <p className="text-muted-foreground">Start free. Upgrade when you&apos;re ready.</p>
@@ -292,30 +288,30 @@ export default function HomePage() {
             {PLANS_PREVIEW.map((p) => (
               <div
                 key={p.name}
-                className={`rounded-2xl border-2 p-5 flex flex-col gap-4 ${
+                className={`rounded-2xl border-2 p-5 flex flex-col gap-4 shadow-2xs ${
                   p.primary
-                    ? "border-brand-green shadow-lg shadow-brand-green/10 bg-brand-mint/30"
-                    : "border-[hsl(var(--border))] bg-white"
+                    ? "border-brand-green shadow-md shadow-brand-green/10 bg-brand-mint/40"
+                    : "border-border/80 bg-white"
                 }`}
               >
                 {p.primary && (
-                  <span className="self-start text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-brand-green text-white">
+                  <span className="self-start text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-brand-green text-white shadow-2xs">
                     Most popular
                   </span>
                 )}
                 <div>
                   <p className="font-display font-bold text-xl text-brand-green-deep">{p.name}</p>
-                  <p className="text-2xl font-bold text-brand-green-deep mt-1">
-                    {p.price}<span className="text-sm font-normal text-muted-foreground">/mo</span>
+                  <p className="text-2xl font-bold text-brand-green-deep mt-1 font-serif">
+                    {p.price}<span className="text-sm font-normal text-muted-foreground font-sans">/mo</span>
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">{p.desc}</p>
                 </div>
                 <Link
                   href={p.href}
-                  className={`w-full text-center text-sm font-semibold py-2.5 rounded-xl transition-colors ${
+                  className={`w-full text-center text-sm font-semibold py-2.5 rounded-xl transition-all ${
                     p.primary
-                      ? "bg-brand-green hover:bg-brand-green-deep text-white"
-                      : "border border-[hsl(var(--border))] text-brand-green-deep hover:border-brand-green/30"
+                      ? "bg-brand-green hover:bg-brand-green-deep text-white shadow-xs active:scale-[0.99]"
+                      : "border border-border/80 bg-white text-brand-green-deep hover:border-brand-green/30 hover:bg-brand-mint/30"
                   }`}
                 >
                   {p.cta}
@@ -332,9 +328,7 @@ export default function HomePage() {
 
       {/* ── Final CTA ────────────────────────────────────────────────────── */}
       <section className="max-w-2xl mx-auto px-5 py-20 text-center">
-        <div className="w-16 h-16 rounded-2xl planned-gradient flex items-center justify-center shadow-lg mx-auto mb-6">
-          <CalendarCheck className="w-8 h-8 text-white" />
-        </div>
+        <BrandLogo size="xl" showWordmark={false} className="mx-auto mb-6" />
         <h2 className="font-display text-3xl sm:text-4xl font-bold text-brand-green-deep mb-4">
           Start your homeschool journey today
         </h2>
@@ -360,12 +354,7 @@ export default function HomePage() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer className="border-t border-[hsl(var(--border))] bg-white">
         <div className="max-w-5xl mx-auto px-5 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg planned-gradient flex items-center justify-center">
-              <CalendarCheck className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-display font-bold text-brand-green-deep text-sm">Planned</span>
-          </div>
+          <BrandLogo size="sm" href="/" />
           <div className="flex items-center gap-5 text-xs text-muted-foreground">
             <Link href="/pricing" className="hover:text-brand-green transition-colors">Pricing</Link>
             <Link href="/auth/signin" className="hover:text-brand-green transition-colors">Sign in</Link>

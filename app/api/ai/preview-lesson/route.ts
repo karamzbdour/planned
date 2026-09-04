@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ai, MODEL } from "@/lib/ai";
+import { generateWithFallback } from "@/lib/ai/fallback";
 import { rateLimit } from "@/lib/rateLimit";
 
 interface PreviewRequest {
@@ -182,13 +182,12 @@ Generate a concise JSON response matching EXACTLY this structure (no markdown, j
   ${faith !== "SECULAR" && faithIntegration ? '"faithReflection": "1 warm sentence connecting this to faith values",' : '"faithReflection": null,'}
 }`;
 
-          const res = await ai.messages.create({
-            model: MODEL,
-            max_tokens: 600,
-            messages: [{ role: "user", content: prompt }],
+          const res = await generateWithFallback({
+            feature: "preview-lesson",
+            prompt,
           });
 
-          const text = res.content[0]?.text || "";
+          const text = res.text || "";
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed: PreviewLesson = JSON.parse(jsonMatch[0]);

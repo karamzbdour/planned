@@ -8,7 +8,7 @@
  * never reach this code path — gating happens in the API route.
  */
 
-import { ai, MODEL } from "@/lib/ai";
+import { generateWithFallback } from "@/lib/ai/fallback";
 
 export type WorksheetQuestionType =
   | "short-answer"
@@ -107,13 +107,12 @@ Rules:
 - Difficulty must suit ${ctx.yearGroup ?? "primary school"}.
 - expectedAnswer for short-answer / fill-blank should be concise (one short sentence or a single word/phrase). For multiple-choice and drawing, omit expectedAnswer.`;
 
-  const message = await ai.messages.create({
-    model: MODEL,
-    max_tokens: 2048,
-    messages: [{ role: "user", content: prompt }],
+  const message = await generateWithFallback({
+    feature: "worksheet",
+    prompt,
   });
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
+  const text = message.text || "";
   const stripped = text
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
