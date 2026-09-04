@@ -4,6 +4,7 @@ import { generateWithFallback } from "@/lib/ai/fallback";
 import { fetchQuranVerse } from "@/lib/quranApi";
 import { enrichVideoResources } from "@/lib/youtube";
 import { getCurriculumSystemInstruction } from "@/lib/ai/curriculum-prompts";
+import { retrieveCurriculumContext } from "@/lib/curriculum/rag";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,6 +164,7 @@ export interface BuildLessonPromptArgs {
   numeracyLevel?: string;
   reasoningLevel?: string;
   curriculum: string;
+  curriculumContextSnippet?: string;
   faith: string;
   faithIntegration: boolean;
   location: string;
@@ -191,6 +193,7 @@ export function buildLessonPrompt(args: BuildLessonPromptArgs): BuildLessonPromp
     numeracyLevel = "age-appropriate",
     reasoningLevel = "age-appropriate",
     curriculum,
+    curriculumContextSnippet,
     faith,
     faithIntegration,
     location,
@@ -212,7 +215,7 @@ export function buildLessonPrompt(args: BuildLessonPromptArgs): BuildLessonPromp
     faithIntegration
   );
 
-  // Dynamic user prompt suffix
+  // Dynamic user prompt suffix enriched with RAG curriculum standards
   const userPrompt = `Create a detailed, engaging lesson for this child:
 
 CHILD PROFILE:
@@ -225,7 +228,7 @@ CHILD PROFILE:
 - Literacy level: ${literacyLevel}
 - Numeracy level: ${numeracyLevel}
 - Reasoning level: ${reasoningLevel}
-
+${curriculumContextSnippet ? `\n${curriculumContextSnippet}\n` : ""}
 LESSON FOCUS:
 - Subject: ${subject}
 - Topic: ${topic}
@@ -332,6 +335,13 @@ export async function generateLesson(
   const faithIntegration = fp?.faithIntegration ?? false;
   const location = child.user.location ?? "United Kingdom";
 
+  const curriculumContext = await retrieveCurriculumContext({
+    curriculum,
+    yearGroup: child.yearGroup || "Year 3",
+    subject,
+    topic,
+  });
+
   const { systemPrompt, userPrompt, includeFaith } = buildLessonPrompt({
     childName: child.name,
     childAge: child.age,
@@ -342,6 +352,7 @@ export async function generateLesson(
     numeracyLevel: child.numeracyLevel,
     reasoningLevel: child.reasoningLevel,
     curriculum,
+    curriculumContextSnippet: curriculumContext.promptSnippet,
     faith,
     faithIntegration,
     location,

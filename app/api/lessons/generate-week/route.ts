@@ -8,6 +8,7 @@ import { weekGenerationSchema, type WeekLessonData } from "@/lib/ai/schemas";
 import { getUserTier, freeWeekLimitReached, PAYWALL_RESPONSES } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
 import { getWeekGenSystemInstruction } from "@/lib/ai/curriculum-prompts";
+import { retrieveUpcomingCurriculumUnits } from "@/lib/curriculum/rag";
 
 // Per-tier hourly limits for week generation.
 const WEEK_GEN_LIMITS = {
@@ -107,6 +108,19 @@ export async function POST(req: Request) {
     faithIntegration
   );
 
+  const upcomingUnits = await retrieveUpcomingCurriculumUnits({
+    curriculum,
+    yearGroup: child.yearGroup ?? "Year 3",
+    limit: 12,
+  });
+
+  const unitsSnippet =
+    upcomingUnits.length > 0
+      ? `\nSTATUTORY CURRICULUM TOPICS TO SEQUENCE ACROSS THE WEEK:\nPrioritise and schedule lessons matching these statutory units where appropriate:\n${upcomingUnits
+          .map((u) => `- [${u.strand}] ${u.title}`)
+          .join("\n")}\n`
+      : "";
+
   // ── Dynamic user prompt suffix ────────────────────────────────────────────
   const prompt = `Generate a personalised 5-day week timetable of lessons (Monday to Friday, dayOffset 0 to 4) for this child:
 
@@ -117,7 +131,7 @@ CHILD PROFILE:
 - Learning style: ${child.learningStyle ?? "balanced"}
 - Curriculum: ${curriculumLabel}
 - Interests: ${interests}
-
+${unitsSnippet}
 CONTENT RIGHT-SIZING CONSTRAINTS:
 - For each lesson, generate:
   * dayOffset: 0 (Mon), 1 (Tue), 2 (Wed), 3 (Thu), 4 (Fri)

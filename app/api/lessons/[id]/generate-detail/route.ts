@@ -10,6 +10,7 @@ import {
   postProcessLessonContent,
 } from "@/lib/lessonGenerator";
 import { getUserTier } from "@/lib/subscription";
+import { retrieveCurriculumContext } from "@/lib/curriculum/rag";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,13 @@ export async function POST(
   const faithIntegration = fp?.faithIntegration ?? false;
   const location = child.user.location ?? "United Kingdom";
 
+  const curriculumContext = await retrieveCurriculumContext({
+    curriculum,
+    yearGroup: child.yearGroup || "Year 3",
+    subject: lesson.subject,
+    topic: lesson.topic,
+  });
+
   const { systemPrompt, userPrompt, includeFaith } = buildLessonPrompt({
     childName: child.name,
     childAge: child.age,
@@ -102,6 +110,7 @@ export async function POST(
     numeracyLevel: child.numeracyLevel,
     reasoningLevel: child.reasoningLevel,
     curriculum,
+    curriculumContextSnippet: curriculumContext.promptSnippet,
     faith,
     faithIntegration,
     location,

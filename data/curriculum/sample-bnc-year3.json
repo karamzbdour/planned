@@ -1,0 +1,47 @@
+[
+  {
+    "curriculum": "BNC",
+    "keyStage": "KS2",
+    "yearGroup": "Year 3",
+    "subject": "Maths",
+    "strand": "Number and place value",
+    "unitTitle": "Place Value and Counting",
+    "objectiveCode": "BNC-MATH-Y3-NPV-01",
+    "title": "Count from 0 in multiples of 4, 8, 50 and 100",
+    "description": "Pupils should be taught to count from 0 in multiples of 4, 8, 50 and 100; find 10 or 100 more or less than a given number.",
+    "teachingNotes": "Use number lines, hundred squares, and bead strings. Address common misconception of losing track across decade and century boundaries.",
+    "prerequisites": ["Count in steps of 2, 3, and 5 from 0", "Ten more and ten less to 100"],
+    "keywords": ["multiple", "hundred", "more", "less", "sequence"],
+    "orderIndex": 1
+  },
+  {
+    "curriculum": "BNC",
+    "keyStage": "KS2",
+    "yearGroup": "Year 3",
+    "subject": "Maths",
+    "strand": "Fractions",
+    "unitTitle": "Fractions of Shapes and Quantities",
+    "objectiveCode": "BNC-MATH-Y3-FRAC-01",
+    "title": "Understand unit and non-unit fractions with small denominators",
+    "description": "Pupils should be taught to recognise, find and write fractions of a discrete set of objects: unit fractions and non-unit fractions with small denominators.",
+    "teachingNotes": "Begin with concrete sharing of counters and paper folding before writing abstract notation. Reinforce denominator = parts whole is split into, numerator = how many parts we have.",
+    "prerequisites": ["Recognise and find 1/2, 1/4, 2/4 and 3/4 of shapes and quantities"],
+    "keywords": ["numerator", "denominator", "unit fraction", "non-unit fraction", "equal parts"],
+    "orderIndex": 2
+  },
+  {
+    "curriculum": "BNC",
+    "keyStage": "KS2",
+    "yearGroup": "Year 3",
+    "subject": "Science",
+    "strand": "Forces and magnets",
+    "unitTitle": "Magnetic Forces and Poles",
+    "objectiveCode": "BNC-SCI-Y3-FM-01",
+    "title": "Compare how things move on different surfaces and observe magnetic attraction",
+    "description": "Pupils should be taught to compare how things move on different surfaces; notice that some forces need contact between two objects, but magnetic forces can act at a distance.",
+    "teachingNotes": "Hands-on exploration with bar magnets, testing friction on carpet vs tile vs wood. Clarify that not all metals are magnetic (iron, steel vs aluminium).",
+    "prerequisites": ["Explore everyday materials and their properties"],
+    "keywords": ["friction", "magnetic force", "attract", "repel", "poles"],
+    "orderIndex": 3
+  }
+]

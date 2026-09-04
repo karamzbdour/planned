@@ -131,16 +131,16 @@ const TIER_CHAINS: Record<ModelTier, ModelChainEntry[]> = {
     MODEL_CATALOG["claude-3-5-haiku"],
   ],
   reasoning: [
+    MODEL_CATALOG["gemini-3.1-flash-lite"],
     MODEL_CATALOG["gemini-3.5-flash"],
     MODEL_CATALOG["deepseek-r1"],
-    MODEL_CATALOG["gemini-3.1-flash-lite"],
     MODEL_CATALOG["claude-sonnet"],
     MODEL_CATALOG["gemini-3.5-pro"],
   ],
   balanced: [
+    MODEL_CATALOG["gemini-3.1-flash-lite"],
     MODEL_CATALOG["gemini-3.5-flash"],
     MODEL_CATALOG["deepseek-r1"],
-    MODEL_CATALOG["gemini-3.1-flash-lite"],
   ],
 };
 
@@ -172,4 +172,15 @@ export function getCandidateChain(feature: AIFeature): ModelChainEntry[] {
 export function getPrimaryModel(feature: AIFeature): LanguageModel {
   const chain = getCandidateChain(feature);
   return chain[0].getModel();
+}
+
+/**
+ * Returns an embedding model from configured providers using Vercel AI SDK.
+ * Defaults to Google Gemini text-embedding-004, or OpenAI text-embedding-3-small if configured.
+ */
+export function getEmbeddingModel() {
+  if (process.env.EMBEDDING_PROVIDER === "openai" && process.env.OPENAI_API_KEY) {
+    return openai.textEmbeddingModel(process.env.EMBEDDING_MODEL ?? "text-embedding-3-small");
+  }
+  return google.textEmbeddingModel(process.env.EMBEDDING_MODEL ?? "text-embedding-004");
 }

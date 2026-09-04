@@ -6,6 +6,7 @@ import { toTextStream, createTextStreamResponse } from "ai";
 import { streamWithFallback } from "@/lib/ai/fallback";
 import { getUserTier } from "@/lib/subscription";
 import { rateLimit } from "@/lib/rateLimit";
+import { retrieveCurriculumContext } from "@/lib/curriculum/rag";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,7 @@ function systemPrompt(args: {
   faithIntegration: boolean;
   children: SafeChild[];
   lesson?: LessonContext | null;
+  curriculumSnippet?: string;
 }): string {
   const curriculumLabel: Record<string, string> = {
     BNC: "British National Curriculum",
@@ -104,7 +106,7 @@ PARENT'S CONTEXT:
 - Curriculum approach: ${curriculumLabel[args.curriculum] ?? args.curriculum}
 - ${faithLine}
 - Children:
-${childrenSummary}${lessonBlock}
+${childrenSummary}${lessonBlock}${args.curriculumSnippet ? `\n\n${args.curriculumSnippet}` : ""}
 
 RESPONSE GUIDELINES:
 - **Strictly concise & punchy**: Homeschooling parents are often reading while teaching. Get straight to the point in 1–2 short paragraphs or 3–4 bullet points maximum, unless the parent explicitly asks for an in-depth breakdown.
@@ -235,6 +237,24 @@ export async function POST(req: Request) {
       })()
     : null;
 
+  let curriculumSnippet = "";
+  const firstChild = children[0];
+  if (firstChild?.yearGroup) {
+    const queryTopic = lessonForPrompt?.topic
+      ? `${lessonForPrompt.topic}: ${userContent}`
+      : userContent;
+    const rag = await retrieveCurriculumContext({
+      curriculum: familyProfile?.curriculum ?? "BNC",
+      yearGroup: firstChild.yearGroup,
+      subject: lessonForPrompt?.subject ?? "General",
+      topic: queryTopic,
+      limit: 2,
+    });
+    if (rag.promptSnippet) {
+      curriculumSnippet = rag.promptSnippet;
+    }
+  }
+
   const sysPrompt = systemPrompt({
     curriculum: familyProfile?.curriculum ?? "BNC",
     faith: familyProfile?.faith ?? "SECULAR",
@@ -247,6 +267,7 @@ export async function POST(req: Request) {
       interests: safeParseJson<string[]>(c.interests, []),
     })),
     lesson: lessonForPrompt,
+    curriculumSnippet,
   });
 
   // Persist the user message first so it survives even if the AI call fails.

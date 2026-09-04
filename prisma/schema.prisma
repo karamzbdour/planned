@@ -320,3 +320,29 @@ model ExternalActivity {
   @@index([childId])
   @@index([childId, activityDate])
 }
+
+// ─── Curriculum Knowledge Base (RAG) ─────────────────────────────────────────
+
+model CurriculumNode {
+  id            String   @id @default(cuid())
+  curriculum    String   // "BNC" | "MONTESSORI" | "EYFS"
+  keyStage      String   // "EYFS" | "KS1" | "KS2" | "KS3" | "KS4"
+  yearGroup     String   // "Year 1" .. "Year 6" or "3-6" for Montessori
+  subject       String   // "Maths", "Science", "English", "History", etc.
+  strand        String   // e.g. "Number and place value", "States of Matter"
+  unitTitle     String   // e.g. "Solids, Liquids and Gases"
+  objectiveCode String?  // e.g. "BNC-M-Y3-NPV-1"
+  title         String   // Summary of objective
+  description   String   // Full statutory wording
+  teachingNotes String?  // Non-statutory guidance, common misconceptions
+  prerequisites String   @default("[]") // JSON array of prerequisite concepts
+  keywords      String   @default("[]") // JSON array of required vocabulary
+  orderIndex    Int      @default(0)    // Sequence order within strand
+  embedding     Unsupported("vector(768)")?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([curriculum, yearGroup, subject])
+  @@index([curriculum, strand])
+  @@index([objectiveCode])
+}
