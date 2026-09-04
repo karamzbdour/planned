@@ -9,7 +9,7 @@ import { StatsRow } from "@/components/dashboard/stats-row";
 import { GenerateLessons } from "@/components/dashboard/generate-lessons";
 import { ActiveLessonBanner } from "@/components/dashboard/active-lesson-banner";
 import { AddEntryModal } from "@/components/journal/add-entry-modal";
-import { BookOpen, Loader2, Plus, CalendarDays, AlertTriangle, Clock, Sparkles, Compass } from "lucide-react";
+import { BookOpen, Loader2, Plus, CalendarDays, Sparkles, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -441,63 +441,6 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-
-      {/* Missed lessons — past 14 days of lessons the parent hasn't marked
-          complete. Hidden when there's nothing to catch up on. */}
-      {data.missedLessons && data.missedLessons.length > 0 && (
-        <div>
-          <h2 className="font-display font-semibold text-brand-green-deep mb-3 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Missed lessons
-            <span className="text-xs font-normal text-muted-foreground">
-              ({data.missedLessons.length})
-            </span>
-          </h2>
-          <div className="space-y-2">
-            {data.missedLessons.map((lesson) => {
-              const isPartial =
-                lesson.objectivesTotal > 0 &&
-                lesson.objectivesDone > 0 &&
-                lesson.objectivesDone < lesson.objectivesTotal;
-              const dateLabel = new Date(lesson.dayDate).toLocaleDateString(
-                "en-GB",
-                { weekday: "short", day: "numeric", month: "short" },
-              );
-              return (
-                <Link
-                  key={lesson.id}
-                  href={`/dashboard/lesson/${lesson.id}`}
-                  className="block bg-white rounded-xl border border-amber-200 hover:border-amber-300 transition-colors px-4 py-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-muted-foreground flex items-center gap-1.5 mb-0.5">
-                        <Clock className="w-3 h-3" />
-                        {dateLabel} · {lesson.subject}
-                      </p>
-                      <p className="font-medium text-sm text-brand-green-deep truncate">
-                        {lesson.parsedContent.title ?? lesson.topic}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        "shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full",
-                        isPartial
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {isPartial
-                        ? `${lesson.objectivesDone}/${lesson.objectivesTotal} done`
-                        : "Not started"}
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Bloom reward bar */}
       <BloomBar

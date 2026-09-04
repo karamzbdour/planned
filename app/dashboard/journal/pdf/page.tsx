@@ -35,23 +35,24 @@ interface JournalData {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const SUBJECT_PRINT_COLOR: Record<string, string> = {
-  mathematics:          "#3b82f6",
-  maths:                "#3b82f6",
-  english:              "#8b5cf6",
-  science:              "#10b981",
-  history:              "#f59e0b",
-  geography:            "#14b8a6",
-  art:                  "#ec4899",
-  music:                "#a855f7",
-  "religious studies":  "#6366f1",
-  "islamic studies":    "#6366f1",
-  pe:                   "#f97316",
-  computing:            "#06b6d4",
-  "day out":            "#eab308",
+  mathematics:          "#1C4E75",
+  maths:                "#1C4E75",
+  english:              "#6B2856",
+  literacy:             "#6B2856",
+  science:              "#1F5C38",
+  history:              "#7B4E12",
+  geography:            "#1B5760",
+  art:                  "#8E3B20",
+  music:                "#4B296D",
+  "religious studies":  "#273F7A",
+  "islamic studies":    "#273F7A",
+  pe:                   "#8A4810",
+  computing:            "#1B5760",
+  "day out":            "#7B4E12",
 };
 
 function subjectColor(subject: string | null): string {
-  return SUBJECT_PRINT_COLOR[(subject ?? "").toLowerCase()] ?? "#1D9E75";
+  return SUBJECT_PRINT_COLOR[(subject ?? "").toLowerCase()] ?? "#2B5F75";
 }
 
 const MOMENT_LABEL: Record<string, string> = {
@@ -139,7 +140,7 @@ function PDFCard({ entry }: { entry: JournalEntry }) {
         </div>
 
         {/* Title */}
-        <h3 className="font-semibold text-sm text-gray-800 leading-snug">
+        <h3 className="font-serif font-bold text-sm text-[#182848] leading-snug">
           {entry.title}
         </h3>
 
@@ -266,19 +267,19 @@ export default function JournalPDFPage() {
         {/* Journal header */}
         <div className="text-center mb-8">
           <div
-            className="inline-block w-full py-6 rounded-2xl mb-2"
-            style={{ background: "linear-gradient(135deg, #E6F4F1 0%, #D4EBBB 100%)" }}
+            className="inline-block w-full py-7 px-4 rounded-3xl mb-2 border border-[#EAE3D2] shadow-2xs"
+            style={{ background: "linear-gradient(135deg, #EFF4F6 0%, #FAF6ED 100%)" }}
           >
-            <h1 className="font-display font-bold text-2xl text-brand-green-deep">
+            <h1 className="font-serif font-bold text-2xl sm:text-3xl text-brand-green-deep tracking-tight">
               {child.name}&apos;s Homeschool Journal
             </h1>
             {child.yearGroup && (
-              <p className="text-brand-green-deep/70 text-sm mt-1">
+              <p className="text-brand-green-deep/80 text-sm font-medium mt-1">
                 Year {child.yearGroup}
               </p>
             )}
             {range && (
-              <p className="text-brand-green-deep/60 text-sm mt-0.5">{range}</p>
+              <p className="text-[#5A6E78] text-xs mt-0.5 font-medium">{range}</p>
             )}
           </div>
         </div>
@@ -296,10 +297,10 @@ export default function JournalPDFPage() {
 
         {/* Footer */}
         <div className="mt-10 pt-6 border-t border-gray-200 text-center">
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-gray-500">
             Printed from{" "}
-            <span className="font-semibold text-brand-green">Planned</span>
-            {" "}— {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+            <span className="font-serif font-bold text-brand-green-deep">Planned</span>
+            {" "}— Home Education — {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
       </div>

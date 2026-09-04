@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getInitials } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 interface DashboardOverviewProps {
   children: any[];
@@ -24,17 +25,15 @@ export function DashboardOverview({ children, pendingLessons, userName }: Dashbo
   if (children.length === 0) {
     return (
       <div className="max-w-lg mx-auto pt-16 text-center">
-        <div className="w-16 h-16 rounded-2xl planned-gradient flex items-center justify-center mx-auto mb-6 shadow-md">
-          <BookOpen className="w-8 h-8 text-white" />
-        </div>
-        <h1 className="font-display text-2xl font-bold text-brand-green-deep mb-3">
+        <BrandLogo size="xl" showWordmark={false} className="mx-auto mb-6" />
+        <h1 className="font-display text-3xl font-bold text-brand-green-deep mb-3">
           Welcome to Planned!
         </h1>
-        <p className="text-muted-foreground mb-8">
+        <p className="text-muted-foreground mb-8 text-base">
           Let&apos;s add your first child to start generating personalised lessons.
         </p>
         <Link href="/dashboard/children">
-          <Button className="bg-brand-green hover:bg-brand-green-deep gap-2">
+          <Button className="bg-brand-green hover:bg-brand-green-deep gap-2 shadow-sm active:scale-[0.99]">
             <Plus className="w-4 h-4" />
             Add your first child
           </Button>
@@ -46,10 +45,10 @@ export function DashboardOverview({ children, pendingLessons, userName }: Dashbo
   return (
     <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="font-display text-2xl font-bold text-brand-green-deep">
+        <h1 className="font-display text-3xl font-bold text-brand-green-deep">
           {greeting()}, {userName.split(" ")[0]} 👋
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <p className="text-muted-foreground text-sm mt-1 font-sans">
           Here&apos;s your family&apos;s learning snapshot.
         </p>
       </div>
@@ -57,22 +56,32 @@ export function DashboardOverview({ children, pendingLessons, userName }: Dashbo
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
-          { label: "Children", value: children.length, icon: <Users className="w-4 h-4" />, colour: "bg-brand-mint" },
-          { label: "Lessons due", value: pendingLessons.length, icon: <BookOpen className="w-4 h-4" />, colour: "bg-brand-amber" },
+          {
+            label: "Children",
+            value: children.length,
+            icon: <Users className="w-4 h-4 text-brand-green" />,
+            colour: "bg-brand-mint border border-brand-green/20",
+          },
+          {
+            label: "Lessons due",
+            value: pendingLessons.length,
+            icon: <BookOpen className="w-4 h-4 text-[#1C4E75]" />,
+            colour: "bg-[#F0F5F9] border border-[#CDE0EE]",
+          },
           {
             label: "Bloom stars",
             value: children.reduce((sum, c) => sum + c.bloomStars, 0),
-            icon: <Flower2 className="w-4 h-4" />,
-            colour: "bg-brand-mint",
+            icon: <Flower2 className="w-4 h-4 text-amber-600" />,
+            colour: "bg-brand-amber border border-amber-300/40",
           },
         ].map((stat) => (
-          <Card key={stat.label} className="border-border/50">
+          <Card key={stat.label} className="border-border/80 shadow-2xs hover:shadow-xs transition-shadow">
             <CardContent className="p-4">
-              <div className={`w-8 h-8 rounded-lg ${stat.colour} flex items-center justify-center text-brand-green-deep mb-3`}>
+              <div className={`w-8 h-8 rounded-lg ${stat.colour} flex items-center justify-center mb-3 shadow-2xs`}>
                 {stat.icon}
               </div>
-              <p className="font-display font-bold text-2xl text-brand-green-deep">{stat.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
+              <p className="font-display font-bold text-2xl text-brand-green-deep leading-none">{stat.value}</p>
+              <p className="text-xs text-muted-foreground mt-1 font-sans">{stat.label}</p>
             </CardContent>
           </Card>
         ))}

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  CalendarCheck,
   Eye,
   EyeOff,
   Loader2,
@@ -21,6 +20,7 @@ import {
   BookOpen,
   Lightbulb,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { AgeCarousel } from "@/components/onboarding/age-carousel";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -223,8 +223,8 @@ function OnboardingSkeleton() {
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="flex flex-col items-center mb-2">
-          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4">
-            <CalendarCheck className="w-6 h-6 text-white" strokeWidth={1.75} />
+          <div className="mb-4">
+            <BrandLogo size="lg" showWordmark={false} />
           </div>
           <div className="h-3.5 w-24 bg-muted animate-pulse rounded-full mb-1" />
         </div>
@@ -657,8 +657,8 @@ function OnboardingContent() {
 
         {/* Header */}
         <div className="flex flex-col items-center mb-2">
-          <div className="w-12 h-12 rounded-2xl planned-gradient flex items-center justify-center shadow-md mb-4" aria-hidden="true">
-            <CalendarCheck className="w-6 h-6 text-white" strokeWidth={1.75} />
+          <div className="mb-4" aria-hidden="true">
+            <BrandLogo size="lg" showWordmark={false} />
           </div>
           <p className="text-xs font-semibold uppercase tracking-widest text-brand-green mb-1">
             {STEP_LABELS[step - 1]}

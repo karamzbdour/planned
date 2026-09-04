@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Menu,
-  CalendarCheck,
   LayoutDashboard,
   TrendingUp,
   Flower2,
@@ -28,6 +27,7 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand/brand-logo";
 
 const BOTTOM_NAV = [
   { href: "/dashboard",          label: "Dashboard", icon: LayoutDashboard },
@@ -43,7 +43,7 @@ function DashboardHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const isSubPage = breadcrumbs.length > 1;
 
   return (
-    <header className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-[hsl(var(--border))] h-14 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-20 shadow-2xs">
+    <header className="sticky top-0 bg-[#FAF8F4]/90 backdrop-blur-md border-b border-border/70 h-14 flex items-center justify-between px-3 sm:px-4 md:px-6 shrink-0 z-20 shadow-2xs">
       {/* Left: Mobile hamburger or breadcrumbs / brand */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2">
         <Button
@@ -61,14 +61,7 @@ function DashboardHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
           {isSubPage ? (
             <Breadcrumbs className="py-0" showAllOnMobile={false} />
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg planned-gradient flex items-center justify-center">
-                <CalendarCheck className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="font-display font-bold text-brand-green-deep text-sm">
-                Planned
-              </span>
-            </div>
+            <BrandLogo size="sm" showSubtitle={false} />
           )}
         </div>
 
@@ -101,7 +94,7 @@ function DashboardHeader({ onOpenSidebar }: { onOpenSidebar: () => void }) {
                 <span className="text-xs font-semibold text-brand-green-deep max-w-[85px] sm:max-w-[120px] truncate">
                   {activeChild.name}
                 </span>
-                <ChevronDown className="w-3 h-3 text-brand-green-deep/60 group-hover:text-brand-green-deep shrink-0 transition-transform duration-200" />
+                <ChevronDown className="w-3 h-3 text-brand-green-deep/60 group-hover:text-brand-green-deep shrink-0 transition-colors duration-150" />
               </button>
             </DropdownMenuTrigger>
 
@@ -217,7 +210,7 @@ export function DashboardShell({
           </div>
 
           {/* ── Mobile bottom navigation bar ─────────────────────────────── */}
-          <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-[hsl(var(--border))] flex items-stretch h-16 safe-area-inset-bottom">
+          <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#FAF8F4]/95 backdrop-blur-md border-t border-border/70 flex items-stretch h-16 safe-area-inset-bottom shadow-md">
             {BOTTOM_NAV.map(({ href, label, icon: Icon }) => {
               const active =
                 href === "/dashboard"
@@ -228,16 +221,16 @@ export function DashboardShell({
                   key={href}
                   href={href}
                   className={cn(
-                    "flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
+                    "flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors",
                     active
-                      ? "text-brand-green"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "text-brand-green font-semibold"
+                      : "text-muted-foreground hover:text-brand-green-deep"
                   )}
                 >
                   <Icon
                     className={cn(
-                      "w-5 h-5 shrink-0",
-                      active ? "text-brand-green" : "text-muted-foreground"
+                      "w-5 h-5 shrink-0 transition-colors",
+                      active ? "text-brand-green" : "text-muted-foreground/70"
                     )}
                   />
                   {label}

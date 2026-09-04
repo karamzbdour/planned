@@ -15,25 +15,22 @@ export function StatsRow({
 }: StatsRowProps) {
   const stats = [
     {
-      icon: <BookCheck className="w-4 h-4" />,
+      icon: <BookCheck className="w-4 h-4 text-brand-green" />,
       value: `${lessonsDoneToday}/${totalLessonsToday}`,
       label: "Lessons done",
-      bg: "bg-brand-mint",
-      text: "text-brand-green-deep",
+      bg: "bg-brand-mint border border-brand-green/20",
     },
     {
-      icon: <BarChart3 className="w-4 h-4" />,
+      icon: <BarChart3 className="w-4 h-4 text-[#1C4E75]" />,
       value: `${curriculumPercent}%`,
       label: "Curriculum covered",
-      bg: "bg-brand-amber",
-      text: "text-brand-green-deep",
+      bg: "bg-[#F0F5F9] border border-[#CDE0EE]",
     },
     {
-      icon: <Star className="w-4 h-4 fill-amber-400 text-amber-400" />,
+      icon: <Star className="w-4 h-4 fill-amber-400 text-amber-500" />,
       value: bloomStars,
       label: "Bloom stars",
-      bg: "bg-yellow-50",
-      text: "text-brand-green-deep",
+      bg: "bg-brand-amber border border-amber-300/40",
     },
   ];
 
@@ -42,17 +39,17 @@ export function StatsRow({
       {stats.map((s) => (
         <div
           key={s.label}
-          className="bg-white rounded-2xl border border-[hsl(var(--border))] px-4 py-3.5"
+          className="bg-white rounded-2xl border border-border/80 px-4 py-3.5 shadow-2xs hover:shadow-xs transition-shadow"
         >
           <div
-            className={`w-7 h-7 rounded-lg ${s.bg} flex items-center justify-center ${s.text} mb-2.5`}
+            className={`w-7 h-7 rounded-lg ${s.bg} flex items-center justify-center mb-2.5 shadow-2xs`}
           >
             {s.icon}
           </div>
           <p className="font-display font-bold text-xl text-brand-green-deep leading-none">
             {s.value}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
+          <p className="text-xs text-muted-foreground mt-1 font-sans">{s.label}</p>
         </div>
       ))}
     </div>

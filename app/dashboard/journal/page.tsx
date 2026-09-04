@@ -28,6 +28,7 @@ import {
   Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSubjectTheme } from "@/lib/subject-colors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,51 +63,22 @@ type FilterCategory = "all" | "day_out" | "creative" | "breakthrough" | "photos"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const SUBJECT_BG: Record<string, string> = {
-  mathematics: "from-blue-400 to-blue-600",
-  maths:       "from-blue-400 to-blue-600",
-  english:     "from-violet-400 to-violet-600",
-  science:     "from-emerald-400 to-emerald-600",
-  history:     "from-amber-400 to-amber-600",
-  geography:   "from-teal-400 to-teal-600",
-  art:         "from-pink-400 to-pink-600",
-  music:       "from-purple-400 to-purple-600",
-  "religious studies": "from-indigo-400 to-indigo-600",
-  "islamic studies":   "from-indigo-400 to-indigo-600",
-  pe:          "from-orange-400 to-orange-600",
-  computing:   "from-cyan-400 to-cyan-600",
-  "day out":   "from-yellow-400 to-yellow-600",
-};
-
-const SUBJECT_DOT: Record<string, string> = {
-  mathematics: "bg-blue-500",
-  maths:       "bg-blue-500",
-  english:     "bg-violet-500",
-  science:     "bg-emerald-500",
-  history:     "bg-amber-500",
-  geography:   "bg-teal-500",
-  art:         "bg-pink-500",
-  music:       "bg-purple-500",
-  "religious studies": "bg-indigo-500",
-  "islamic studies":   "bg-indigo-500",
-  pe:          "bg-orange-500",
-  computing:   "bg-cyan-500",
-  "day out":   "bg-yellow-500",
-};
-
 function subjectBg(subject: string | null) {
-  return SUBJECT_BG[(subject ?? "").toLowerCase()] ?? "from-brand-green to-emerald-600";
+  const theme = getSubjectTheme(subject);
+  return theme.solidBg;
 }
+
 function subjectDot(subject: string | null) {
-  return SUBJECT_DOT[(subject ?? "").toLowerCase()] ?? "bg-brand-green";
+  const theme = getSubjectTheme(subject);
+  return theme.dot;
 }
 
 const MOMENT_META: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  REGULAR:     { icon: <BookOpen className="w-3 h-3" />,  label: "Lesson",        color: "bg-slate-100 text-slate-600" },
-  BREAKTHROUGH:{ icon: <Sparkles className="w-3 h-3" />,  label: "Breakthrough!", color: "bg-amber-100 text-amber-700" },
-  DAY_OUT:     { icon: <MapPin className="w-3 h-3" />,    label: "Day out",       color: "bg-green-100 text-green-700" },
-  CREATIVE:    { icon: <Palette className="w-3 h-3" />,   label: "Creative",      color: "bg-pink-100 text-pink-700" },
-  SPECIAL:     { icon: <Star className="w-3 h-3" />,      label: "Special",       color: "bg-purple-100 text-purple-700" },
+  REGULAR:     { icon: <BookOpen className="w-3 h-3" />,  label: "Lesson",        color: "bg-[#EFF4F6] border border-[#EAE3D2] text-[#182848]" },
+  BREAKTHROUGH:{ icon: <Sparkles className="w-3 h-3" />,  label: "Breakthrough!", color: "bg-[#FDF9F0] border border-[#EED9B8] text-[#7B4E12]" },
+  DAY_OUT:     { icon: <MapPin className="w-3 h-3" />,    label: "Day out",       color: "bg-[#EBF5EE] border border-[#C4E5CE] text-[#1F5C38]" },
+  CREATIVE:    { icon: <Palette className="w-3 h-3" />,   label: "Creative",      color: "bg-[#FDF0EC] border border-[#F8D4C8] text-[#8E3B20]" },
+  SPECIAL:     { icon: <Star className="w-3 h-3 text-[#C98A2C] fill-[#C98A2C]" />, label: "Special", color: "bg-[#FDF2D9] border border-[#EED9B8] text-[#8A4810]" },
 };
 
 function momentMeta(moment: string) {
@@ -203,30 +175,30 @@ function EntryViewerModal({
           {/* Header */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                {entry.subject && (
-                  <span className={cn("w-2 h-2 rounded-full shrink-0", subjectDot(entry.subject))} />
-                )}
-                {entry.subject && (
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    {entry.subject}
-                  </span>
-                )}
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                {entry.subject && (() => {
+                  const theme = getSubjectTheme(entry.subject);
+                  return (
+                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-md border", theme.badgeBg, theme.badgeBorder, theme.text)}>
+                      {entry.subject}
+                    </span>
+                  );
+                })()}
                 <span className={cn("inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium", meta.color)}>
                   {meta.icon}
                   {meta.label}
                 </span>
                 {entry.durationMins && entry.durationMins > 0 ? (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-brand-mint text-brand-green-deep font-medium">
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#EFF4F6] text-[#182848] border border-[#EAE3D2] font-medium">
                     <Clock className="w-3 h-3" />
                     {entry.durationMins}m
                   </span>
                 ) : null}
               </div>
-              <h2 className="font-display font-bold text-brand-green-deep text-lg leading-snug">
+              <h2 className="font-serif font-bold text-brand-green-deep text-xl leading-snug">
                 {entry.title}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-1">
                 {formatEntryDate(entry.entryDate)}
               </p>
             </div>
@@ -240,19 +212,20 @@ function EntryViewerModal({
             )}
           </div>
 
-          {/* Notes */}
-          <p
-            className="text-[15px] leading-relaxed text-brand-green-deep/80 whitespace-pre-wrap"
-            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-          >
-            {entry.notes}
-          </p>
+          {/* Notes in archival paper container */}
+          <div className="bg-[#FAF6ED] border border-[#EAE3D2] rounded-2xl p-4 shadow-2xs">
+            <p
+              className="text-[15px] leading-relaxed text-[#182848] whitespace-pre-wrap font-sans"
+            >
+              {entry.notes}
+            </p>
+          </div>
 
           {/* Tags */}
           {entry.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {entry.tags.map((t) => (
-                <span key={t} className="text-xs bg-brand-mint text-brand-green-deep px-2 py-0.5 rounded-full font-medium">
+                <span key={t} className="text-xs bg-[#EFF4F6] text-[#182848] border border-[#EAE3D2] px-2.5 py-0.5 rounded-full font-medium">
                   #{t}
                 </span>
               ))}
@@ -285,6 +258,7 @@ function ScrapbookCard({
 }) {
   const featured = isFeatured(entry);
   const meta = momentMeta(entry.moment);
+  const theme = getSubjectTheme(entry.subject);
 
   return (
     <div
@@ -293,7 +267,7 @@ function ScrapbookCard({
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onClick()}
       className={cn(
-        "bg-white rounded-2xl border border-[hsl(var(--border))] overflow-hidden cursor-pointer hover:shadow-md hover:border-brand-green/30 transition-all break-inside-avoid mb-3 group",
+        "bg-white rounded-2xl border border-[#EAE3D2] overflow-hidden cursor-pointer hover:shadow-md hover:border-[#2B5F75]/40 transition-all break-inside-avoid mb-3.5 group shadow-2xs",
         featured && "col-span-2"
       )}
     >
@@ -304,19 +278,21 @@ function ScrapbookCard({
           <img
             src={entry.photoUrl}
             alt={entry.title}
-            className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+            className="w-full h-full object-cover"
           />
         </div>
       ) : (
-        <div className={cn("w-full bg-gradient-to-br", subjectBg(entry.subject), featured ? "h-28" : "h-14")} />
+        <div className={cn("w-full relative", theme.solidBg, featured ? "h-20" : "h-12")}>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+        </div>
       )}
 
       {/* Content */}
-      <div className="px-3 py-3 space-y-2">
+      <div className="px-3.5 py-3 space-y-2">
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">
           {entry.subject && (
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate">
+            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-md border truncate max-w-[100px]", theme.badgeBg, theme.badgeBorder, theme.text)}>
               {entry.subject}
             </span>
           )}
@@ -325,27 +301,27 @@ function ScrapbookCard({
             {meta.label}
           </span>
           {entry.durationMins && entry.durationMins > 0 ? (
-            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-mint text-brand-green-deep font-medium shrink-0">
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[#EFF4F6] text-[#182848] border border-[#EAE3D2] font-medium shrink-0">
               <Clock className="w-2.5 h-2.5" />
               {entry.durationMins}m
             </span>
           ) : null}
           {entry.hasPhoto && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[#FAF6ED] text-[#5A6E78] border border-[#EAE3D2] shrink-0">
               <Camera className="w-2.5 h-2.5" />
             </span>
           )}
         </div>
 
-        <h3 className="font-semibold text-sm text-brand-green-deep leading-snug">
+        <h3 className="font-serif font-bold text-sm text-[#182848] leading-snug">
           {entry.title}
         </h3>
 
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+        <p className="text-xs text-[#5A6E78] leading-relaxed line-clamp-3">
           {entry.notes}
         </p>
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 pt-0.5">
           <p className="text-[11px] text-muted-foreground">{formatEntryDate(entry.entryDate)}</p>
           {entry.tags.length > 0 && (
             <div className="flex items-center gap-1">
@@ -371,6 +347,7 @@ function TimelineEntry({
   onClick: () => void;
 }) {
   const meta = momentMeta(entry.moment);
+  const theme = getSubjectTheme(entry.subject);
   const d = new Date(entry.entryDate);
   const dayName = d.toLocaleDateString("en-GB", { weekday: "short" });
   const dayNum  = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -385,22 +362,22 @@ function TimelineEntry({
     >
       {/* Day column */}
       <div className="w-12 shrink-0 text-right pt-0.5">
-        <p className="text-xs font-semibold text-muted-foreground">{dayName}</p>
-        <p className="text-xs text-muted-foreground">{dayNum}</p>
+        <p className="text-xs font-serif font-bold text-brand-green-deep">{dayName}</p>
+        <p className="text-[11px] text-[#5A6E78] font-medium">{dayNum}</p>
       </div>
 
       {/* Dot + line */}
       <div className="flex flex-col items-center">
-        <div className={cn("w-2.5 h-2.5 rounded-full mt-1 shrink-0", subjectDot(entry.subject))} />
-        <div className="w-px flex-1 bg-[hsl(var(--border))] mt-1" />
+        <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ring-2 ring-white shadow-2xs", theme.dot)} />
+        <div className="w-px flex-1 bg-[#EAE3D2] mt-1" />
       </div>
 
       {/* Content */}
-      <div className="flex-1 pb-4 group-hover:opacity-80 transition-opacity">
+      <div className="flex-1 pb-4 group-hover:opacity-85 transition-opacity">
         {/* Badges */}
         <div className="flex items-center gap-1.5 flex-wrap mb-1">
           {entry.subject && (
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide truncate max-w-[100px]">
+            <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-md border truncate max-w-[100px]", theme.badgeBg, theme.badgeBorder, theme.text)}>
               {entry.subject}
             </span>
           )}
@@ -409,26 +386,26 @@ function TimelineEntry({
             {meta.label}
           </span>
           {entry.durationMins && entry.durationMins > 0 ? (
-            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-brand-mint text-brand-green-deep font-medium">
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[#EFF4F6] text-[#182848] border border-[#EAE3D2] font-medium">
               <Clock className="w-2.5 h-2.5" />
               {entry.durationMins}m
             </span>
           ) : null}
           {entry.hasPhoto && (
-            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[#FAF6ED] text-[#5A6E78] border border-[#EAE3D2]">
               <Camera className="w-2.5 h-2.5" />
               Photo
             </span>
           )}
         </div>
 
-        <p className="font-semibold text-sm text-brand-green-deep">{entry.title}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{entry.notes}</p>
+        <p className="font-serif font-bold text-sm text-[#182848]">{entry.title}</p>
+        <p className="text-xs text-[#5A6E78] mt-0.5 line-clamp-2">{entry.notes}</p>
 
         {entry.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-1.5">
             {entry.tags.slice(0, 3).map((t) => (
-              <span key={t} className="text-[10px] bg-brand-mint text-brand-green-deep px-1.5 py-0.5 rounded-full">
+              <span key={t} className="text-[10px] bg-[#EFF4F6] text-[#182848] border border-[#EAE3D2] px-1.5 py-0.5 rounded-full font-medium">
                 #{t}
               </span>
             ))}
@@ -585,24 +562,24 @@ export default function JournalPage() {
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="font-display text-xl font-bold text-brand-green-deep">
+            <h1 className="font-serif text-2xl sm:text-3xl font-bold text-brand-green-deep tracking-tight">
               Journal & Activities
             </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
               Portfolio of {child.name}&apos;s real-world learning and milestones
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Link
               href="/dashboard/journal/pdf"
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-muted-foreground border border-[hsl(var(--border))] bg-white hover:bg-muted/50 px-3 py-2 rounded-xl transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-[#182848] border border-[#EAE3D2] bg-white hover:bg-[#FAF6ED] px-3 py-2 rounded-xl transition-colors shadow-2xs"
             >
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4 text-brand-green" />
               PDF keepsake
             </Link>
             <button
               onClick={() => handleOpenWithTemplate(undefined)}
-              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-3.5 py-2 rounded-xl transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-3.5 py-2 rounded-xl transition-colors shadow-2xs"
             >
               <Plus className="w-4 h-4" />
               Add entry
@@ -611,7 +588,7 @@ export default function JournalPage() {
         </div>
 
         {/* Stats bar */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 gap-2 sm:gap-3">
           {[
             { value: stats.totalEntries,  label: "entries" },
             { value: stats.withPhotos,    label: "with photos" },
@@ -620,24 +597,24 @@ export default function JournalPage() {
           ].map((s) => (
             <div
               key={s.label}
-              className="bg-white rounded-2xl border border-[hsl(var(--border))] px-3 py-3 text-center"
+              className="bg-white rounded-2xl border border-[#EAE3D2] px-3 py-3 text-center shadow-2xs"
             >
-              <p className="font-display font-bold text-xl text-brand-green-deep leading-none">
+              <p className="font-serif font-bold text-xl sm:text-2xl text-brand-green-deep leading-none">
                 {s.value}
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{s.label}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 font-medium">{s.label}</p>
             </div>
           ))}
         </div>
 
         {/* ── Quick Log Real-World Activity Tray ────────────────────────────── */}
-        <div className="bg-gradient-to-br from-brand-mint/60 via-brand-mint/30 to-white p-4 rounded-2xl border border-brand-green/20 space-y-2.5">
+        <div className="bg-gradient-to-br from-[#EFF4F6] via-[#FAF6ED]/60 to-white p-4 rounded-2xl border border-[#EAE3D2] space-y-2.5 shadow-2xs">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-green-deep flex items-center gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-green-deep flex items-center gap-1.5 font-sans">
               <Compass className="w-3.5 h-3.5 text-brand-green" />
               <span>Quick Log Real-World Learning</span>
             </p>
-            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            <span className="text-[11px] text-muted-foreground hidden sm:inline font-medium">
               Pre-filled duration & tags
             </span>
           </div>
@@ -647,9 +624,9 @@ export default function JournalPage() {
               <button
                 key={tmpl.id}
                 onClick={() => handleOpenWithTemplate(tmpl.id)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-brand-green/25 hover:border-brand-green hover:shadow-xs text-xs font-medium text-brand-green-deep transition-all shrink-0 group"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#EAE3D2] hover:border-brand-green/60 hover:shadow-2xs text-xs font-medium text-brand-green-deep transition-all shrink-0 group shadow-3xs"
               >
-                <span className="group-hover:scale-110 transition-transform">
+                <span>
                   {tmpl.emoji}
                 </span>
                 <span>{tmpl.shortLabel}</span>
@@ -662,7 +639,7 @@ export default function JournalPage() {
         {entries.length > 0 && (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             {/* Category filters */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
               {(
                 [
                   { id: "all", label: `All (${entries.length})` },
@@ -678,8 +655,8 @@ export default function JournalPage() {
                   className={cn(
                     "text-xs px-2.5 py-1.5 rounded-xl border transition-all shrink-0 font-medium",
                     filterCategory === f.id
-                      ? "bg-brand-green text-white border-brand-green shadow-xs"
-                      : "bg-white border-[hsl(var(--border))] text-muted-foreground hover:text-brand-green-deep hover:border-brand-green/30"
+                      ? "bg-brand-green text-white border-brand-green shadow-2xs"
+                      : "bg-white border-[#EAE3D2] text-muted-foreground hover:text-brand-green-deep hover:border-brand-green/40 shadow-3xs"
                   )}
                 >
                   {f.label}
@@ -688,13 +665,13 @@ export default function JournalPage() {
             </div>
 
             {/* View toggle */}
-            <div className="inline-flex bg-muted rounded-xl p-1 gap-1 shrink-0">
+            <div className="inline-flex bg-[#EFF4F6] border border-[#EAE3D2] rounded-xl p-1 gap-1 shrink-0">
               <button
                 onClick={() => setView("scrapbook")}
                 className={cn(
                   "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-all",
                   view === "scrapbook"
-                    ? "bg-white text-brand-green-deep shadow-sm"
+                    ? "bg-white text-brand-green-deep shadow-2xs font-semibold"
                     : "text-muted-foreground hover:text-brand-green-deep"
                 )}
               >
@@ -706,7 +683,7 @@ export default function JournalPage() {
                 className={cn(
                   "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg transition-all",
                   view === "timeline"
-                    ? "bg-white text-brand-green-deep shadow-sm"
+                    ? "bg-white text-brand-green-deep shadow-2xs font-semibold"
                     : "text-muted-foreground hover:text-brand-green-deep"
                 )}
               >
@@ -719,17 +696,17 @@ export default function JournalPage() {
 
         {/* Empty state (no entries at all) */}
         {entries.length === 0 && (
-          <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-12 text-center">
+          <div className="bg-white rounded-2xl border border-[#EAE3D2] px-5 py-12 text-center shadow-2xs">
             <p className="text-3xl mb-3">📓</p>
-            <p className="font-semibold text-brand-green-deep">
+            <p className="font-serif font-bold text-lg text-brand-green-deep">
               No journal entries yet
             </p>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Record memories, breakthroughs, practical life skills, and day trips as you go.
+            <p className="text-sm text-muted-foreground mt-1 mb-5 max-w-sm mx-auto">
+              Record memories, breakthroughs, practical life skills, and day trips in {child.name}&apos;s keepsake portfolio.
             </p>
             <button
               onClick={() => handleOpenWithTemplate(undefined)}
-              className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2.5 rounded-xl transition-colors shadow-xs"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-brand-green hover:bg-brand-green-deep px-4 py-2.5 rounded-xl transition-colors shadow-2xs"
             >
               <Plus className="w-4 h-4" />
               Write first entry
@@ -739,9 +716,9 @@ export default function JournalPage() {
 
         {/* Empty filter result state */}
         {entries.length > 0 && filteredEntries.length === 0 && (
-          <div className="bg-white rounded-2xl border border-[hsl(var(--border))] px-5 py-8 text-center">
+          <div className="bg-white rounded-2xl border border-[#EAE3D2] px-5 py-8 text-center shadow-2xs">
             <p className="text-xl mb-2">🔍</p>
-            <p className="font-semibold text-sm text-brand-green-deep">
+            <p className="font-serif font-bold text-base text-brand-green-deep">
               No entries match this filter
             </p>
             <p className="text-xs text-muted-foreground mt-1 mb-3">
@@ -774,7 +751,7 @@ export default function JournalPage() {
           <div className="space-y-6">
             {groupedTimeline.map((group) => (
               <div key={group.weekKey}>
-                <h2 className="font-display font-semibold text-sm text-muted-foreground mb-3">
+                <h2 className="font-serif font-bold text-sm text-brand-green-deep mb-3">
                   {group.label}
                 </h2>
                 <div className="space-y-0">
